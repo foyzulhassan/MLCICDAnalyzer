@@ -31,7 +31,7 @@ class Tracing:
 
     # Trace the target and write the trace log to a file
     def log_trace(self, target):
-        command = f'strace --follow-forks --decode-fds=path --trace=%file --output=trace.log bash {target} 2>&1'
+        command = f'strace --follow-forks --decode-fds=path --trace=%file --string-limit=9999999 --output=trace.log bash {target} 2>&1'
         subprocess.run(command, shell=True)
 
     # Parse distinct paths from system trace and write them to a file
@@ -51,10 +51,12 @@ class Tracing:
     # Parse language runtime versions
     def parse_versions(self):
         versions = []
-        path_versions = [re.findall('(?<=[\\/\\\\]python)(.+?)(?=[\\/\\\\])', path) for path in self.paths]
-        for path_version in path_versions:
+        path_versions = [re.findall('(?<=[\\/]python)(.+?)(?=[\\/])', path) for path in self.paths] # Find all versions in python invocations in paths
+        for path_version in path_versions: # Flatten versions to a single dimensional list
             versions.extend(path_version)
-        return list(set(versions))
+        versions = list(set(versions)) # Remove non-unique versions from the single dimensional list
+        versions = [version for version in versions if len(re.findall('^\\d\\..*', version)) != 0] # Remove general or non-sense versions from the single dimensional list
+        return versions
 
     # Parse requirements, or library/module dependencies
     def parse_requirements(self):
@@ -92,7 +94,7 @@ class Tracing:
 
     # Parse configuration of a script used in target
     def parse_script(self, script):
-        execve = [list(eval(re.findall("\\[(.+?)\\]", trace)[0])) for trace in self.trace if "execve" in trace]
+        execve = [list(eval(re.findall("\\[(.+?)\\]", trace)[0])) for trace in self.trace if 'execve' in trace and not '<... execve resumed>' in trace]
         args = [arg for arg in execve if arg[0] == script]
-        args = [] if len(args) == 0 else args[0]
+        args = [[]] if len(args) == 0 else args
         return args
