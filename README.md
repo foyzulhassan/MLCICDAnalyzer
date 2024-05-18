@@ -5,6 +5,7 @@ Automatically create robust CI/CD environments for applications that utilize mac
 - **Linux-Based Environment** (e.g. Ubuntu)
 - **Python3** (e.g. Python 3.11)
 - **Target Dependencies** (i.e. Dependencies required to run the target script/executable)
+- **ruamel.yaml** (i.e. pip install ruamel.yaml)
 
 # Target Wrapper
 Pathing issues can occur when selecting targets in directories other than this project's root. Because of this, **all targets must be enclosed within the wrapper provided below.** The "--target" argument should point to this wrapper.
@@ -12,9 +13,9 @@ Pathing issues can occur when selecting targets in directories other than this p
 ```
 # !/bin/bash
 home=$PWD # Save the current directory
-cd $(dirname "$0") # Navigate to the target's directory
+cd $(dirname "$0") # Navigate to the target's directory (this script must be in the same directory as the target)
 
-# INSERT COMMAND TO RUN THE TARGET HERE
+INSERT_COMMAND(S)_TO_RUN_THE_TARGET_HERE > /dev/null 2>&1 # Run target, discard output
 
 cd $home
 ```
@@ -25,8 +26,8 @@ cd $home
 3. Install target dependencies within the environment
 4. **Create the appropriate wrapper for the target within the environment**
 5. Clone this project and navigate to its root directory
-6. Run "python3 /<TARGET> --target /<PATH> --requirement /<PATH> --template /<PATH> --workflow /<PATH> --workflow_name /<NAME>"\
-**Ex:** python3 main.py --target target.sh --requirement requirement.txt --template dependencies.yaml --workflow workflow.yaml --workflow_name Workflow
+6. Run "python3 main.py --target \<PATH\> --requirement \<PATH\> --template \<PATH\> --workflow \<PATH\> --workflow_name \<NAME\> --new_trace=\<VALUE\>"\
+**Ex:** python3 main.py --target target.sh --requirement requirement.txt --template dependencies.yaml --workflow workflow.yaml --workflow_name workflow --new_trace=True
 
 # Arguments
 ## --target PATH
@@ -56,9 +57,21 @@ cd $home
 ## --workflow_name NAME
 **Description:** Name for a new workflow configuration\
 **Type:** String\
-**Default:** Workflow\
+**Default:** workflow\
 **Example:** python3 main.py --template Workflow
+
+## --new_trace=VALUE
+**Description:** Whether the target should be traced again\
+**Type:** bool\
+**Default:** False\
+**Example:** python3 main.py --new_trace=True
+
+## --dockerfile PATH
+**Description:** Path to the dockerfile that the target uses\
+**Type:** String\
+**Default:** Dockerfile\
+**Example:** python3 main.py --dockerfile docker/Dockerfile
 
 # References
 **Author:** Javid Ditty\
-**Date:** 4/11/2024
+**Date:** 5/17/2024
