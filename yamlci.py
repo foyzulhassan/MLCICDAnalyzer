@@ -1,60 +1,82 @@
+from tracing import Tracing
+import ruamel.yaml
 from ruamel.yaml import YAML
+from pathlib import Path
 
 # Class that builds .yaml files for CI/CD environments
 class YamlCI:
-    def __init__(self):
-        self.yaml = {}
+    def __init__(self, tracing: Tracing, name='Workflow', triggers={'push': {'branches': ['main']}}):
+        self.yaml = {'name': name, 'on': triggers, 'jobs': {}}
+        self.tracing = tracing
+        self.set_job_containers()
+        self.set_basic_jobs()
+        self.set_service_containers()
 
-    # Set the workflow name of the yaml file
-    def set_workflow_name(self, name: str):
-        self.yaml.update({'name': name})
+    # Add jobs that use job containers to yaml
+    def set_job_containers(self):
+        # Stop if the job container does not have an image
+        if self.tracing.job_containers['docker']['img'] == '':
+            return
 
-    # Set the branches of a basic workflow trigger of in the yaml file
-    def set_workflow_trigger_branches(self, branches: list[str]):
-        self.yaml.update({'on': {'push': {'branches': branches}}})
+        # Add image to job container
+        self.yaml['jobs'].update({'job': {'runs-on': 'ubuntu-latest'}}) # Add runner to job container
+        self.yaml['jobs']['job'].update({'container': {'image': self.tracing.job_containers['docker']['img']}}) # Add container and image to job container
+        self.yaml['jobs']['job'].update({'strategy': {}}) # Add strategy to job container
+        self.yaml['jobs']['job'].update({'steps': [{'uses': 'actions/checkout@v4'}]}) # Add repository checkout action to job container
 
-    # Set the jobs in the yaml file, including runtime versions, requirements, and a pytest invocation
-    def set_jobs(self, versions: list, requirements: str, scripts: dict):
-        # TODO: Decompose this function into smaller, specialized functions
-
-        # Add jobs to configuration
-        self.yaml.update({'jobs': {}})
-
-        # Add container job
-        if scripts['docker']['img'] != '':
-            self.yaml['jobs'].update({'container': {'runs-on': 'ubuntu-latest'}})
-
-            # Add container to container job
-            if len(scripts['docker']['img']) != 0: # Add container img
-                self.yaml['jobs']['container'].update({'container': {'image': scripts['docker']['img']}})
-
-            # Add steps to container job
-            self.yaml['jobs']['container'].update({'steps': [{'uses': 'actions/checkout@v4'}]})
-
-            # Add execs to container job
-            if len(scripts['docker']['img']) != 0 and len(scripts['docker']['exec']) != 0: # Add container execs
-                docker = '; '.join([' '.join(script[6:]) for script in scripts['docker']['exec']])
-                self.yaml['jobs']['container']['steps'].append({
-                    'name': 'Execute docker jobs',
-                    'run': docker})
+        # Stop if job container does not have execution scripts
+        if len(self.tracing.job_containers['docker']['exec']) == 0:
+            return
         
-        # Add basic job
-        if len(versions) != 0: 
-            self.yaml['jobs'].update({'basic': {'runs-on': 'ubuntu-latest'}})
-            self.yaml['jobs']['basic'].update({'strategy': {'matrix': {'python-version': versions}}}) # Add python-versions
-            self.yaml['jobs']['basic'].update({'steps': [{'uses': 'actions/checkout@v4'}]}) # Add steps to basic job
+        # Add execs to job container
+        docker = '; '.join([' '.join(script[6:]) for script in self.tracing.job_containers['docker']['exec']]) # Remove docker invocations from scripts
+        self.yaml['jobs']['job']['steps'].append({ # Add scripts to the job container execs
+            'name': 'Execute docker jobs',
+            'run': docker})
 
-            # Add pytest to job
-            if len(scripts['pytest'][0]) != 0:
-                pytest = '; '.join([' '.join(script) for script in scripts['pytest']])
-                self.yaml['jobs']['basic']['steps'].extend( # Add setup-python and install dependencies
-                    [{'name': 'Setup Python ${{ matrix.python-version }}',
-                    'uses': 'actions/setup-python@v4',
-                    'with': {'python-version': '${{ matrix.python-version }}'}},
-                    {'name': 'Install Dependencies',
-                    'run': f'python -m pip install --upgrade pip; pip install -r {requirements}'}])
-                self.yaml['jobs']['basic']['steps'].append({'name': 'Run Pytest', 'run': f'pip install pytest; {pytest}'}) # Add pytest
+    # Add jobs that use service containers to yaml
+    def set_service_containers(self):
+        # Stop if there are no service containers
+        if len(self.tracing.service_containers) == 0:
+            return
+        
+        # Add a job if it does not already exist
+        if len(self.yaml['jobs']) == 0:
+            self.yaml['jobs'].update({'job': {'runs-on': 'ubuntu-latest'}})
+        
+        # Add services to all basic/job containers
+        service = {}
+        for image in self.tracing.service_containers:
+            service.update({image: {'image': image}})
+        for job in self.yaml['jobs']:
+            self.yaml['jobs'][job].update({'services': {}})
+            self.yaml['jobs'][job]['services'].update(service)
 
+    # Add basic jobs that may use service containers to yaml
+    def set_basic_jobs(self):  
+        # Stop if there is no runtime version information
+        if len(self.tracing.versions) == 0:
+            return
+        
+        # Add a job if it does not already exist
+        if len(self.yaml['jobs']) == 0:
+            self.yaml['jobs'].update({'job': {'runs-on': 'ubuntu-latest'}})
+
+        # Add basic runtime configurations
+        self.yaml['jobs']['job'].update({'strategy': {'matrix': {'python-version': self.tracing.versions}}}) # Add python-versions
+        self.yaml['jobs']['job'].update({'steps': [{'uses': 'actions/checkout@v4'}]}) # Add steps to basic job
+
+        # Add runtime setup and install dependencies
+        self.yaml['jobs']['job']['steps'].extend( 
+            [{'name': 'Setup Python ${{ matrix.python-version }}',
+            'uses': 'actions/setup-python@v4',
+            'with': {'python-version': '${{ matrix.python-version }}'}},
+            {'name': 'Install Dependencies',
+            'run': f'python -m pip install --upgrade pip; pip install -r requirements.txt'}])
+
+        # Add additional runtime scripts
+        compiled_script = '; '.join([' '.join(script) for script in self.tracing.scripts if 'docker' not in script[0]])
+        self.yaml['jobs']['job']['steps'].append({'name': 'Execute Script', 'run': compiled_script})
 
     # Dump the yaml file, as it has been built, to a file
     def dump(self, path: str):
@@ -65,5 +87,14 @@ class YamlCI:
             yaml.sort_base_mapping_type_on_output = False
             yaml.default_style = None
             yaml.width = 100
+            yaml.ignore_aliases = lambda *args : True
             yaml.dump(data=self.yaml,
                       stream=file)
+            
+        # Remove aliases from yaml
+        # TODO: Find cleaner way to remove aliases
+        file = Path(path)  
+        ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
+        yaml = YAML(pure=True)
+        data = yaml.load(file)
+        yaml.dump(data, file)
