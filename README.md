@@ -26,8 +26,8 @@ cd $home
 3. Install target dependencies within the environment
 4. **Create the appropriate wrapper for the target within the environment**
 5. Clone this project and navigate to its root directory
-6. Run "python3 main.py --target \<PATH\> --requirement \<PATH\> --template \<PATH\> --workflow \<PATH\> --workflow_name \<NAME\> --new_trace=\<VALUE\>"\
-**Ex:** python3 main.py --target target.sh --requirement requirement.txt --template dependencies.yaml --workflow workflow.yaml --workflow_name workflow --new_trace=True
+6. Run "python3 main.py --target \<PATH\> --requirement \<PATH\> --template \<PATH\> --workflow \<PATH\> --workflow_name \<NAME\> --new_trace"\
+**Ex:** python3 main.py --new_trace --target target.sh --requirement requirement.txt --template dependencies.yaml --workflow workflow.yaml --workflow_name workflow
 
 # Arguments
 ## --target PATH
@@ -35,6 +35,12 @@ cd $home
 **Type:** String (Path)\
 **Default:** target.sh\
 **Example:** python3 main.py --target run.sh
+
+## --new_trace
+**Description:** Whether the target should be traced again\
+**Type:** N/A\
+**Default:** False\
+**Example:** python3 main.py --new_trace
 
 ## --requirement PATH
 **Description:** Path to, or for, a pip requirements file\
@@ -60,12 +66,6 @@ cd $home
 **Default:** workflow\
 **Example:** python3 main.py --template Workflow
 
-## --new_trace=VALUE
-**Description:** Whether the target should be traced again\
-**Type:** bool\
-**Default:** False\
-**Example:** python3 main.py --new_trace=True
-
 ## --dockerfile PATH
 **Description:** Path to the dockerfile that the target uses\
 **Type:** String\
@@ -74,4 +74,4 @@ cd $home
 
 # References
 **Author:** Javid Ditty\
-**Date:** 5/17/2024
+**Date:** 6/10/2024
