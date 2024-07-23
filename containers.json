@@ -1,8 +1,0 @@
-{
-    "job": {
-        "nodejs": []
-    },
-    "service": {
-        "redis": ["redis-cli", "redis-server"]
-    }
-}
