@@ -5,7 +5,7 @@ import subprocess
 import importlib
 import importlib.metadata
 import re
-import json
+import getpass
 
 # Class that initiates and parses system traces of a program
 class Tracing:
@@ -19,23 +19,28 @@ class Tracing:
         if new_trace or not os.path.exists(trace_log):
             self.log_trace(target=target)
         with open(trace_log, 'r') as log:
-            self.trace = list(set(log.read().splitlines()))
+            self.trace = list(log.read().splitlines())
 
         # Load the paths logs (or create it if it do not exist)
         if new_trace or not os.path.exists(paths_log):
             self.log_paths()
         with open(paths_log, 'r') as log:
             self.paths = log.read().splitlines()
+
+        # Parse scripts from system trace
+        self.scripts = self.parse_scripts()
+
+        # Generate a trace summary for missing/unresolvable features from the trace logs
+        if new_trace and os.path.exists(trace_log):
+            self.log_summary()
         
         # Parse runtime information from system trace
         self.versions = self.parse_versions()
         self.requirements = self.parse_requirements()
         with open('requirements.txt', 'w') as file:
             file.write('\n'.join(self.requirements))
+        self.ports = self.parse_ports()
         
-        # Parse scripts from system trace
-        self.scripts = self.parse_scripts()
-
         # Parse containers from system trace
         self.dockerfile = dockerfile
         self.job_containers = self.parse_job_containers()
@@ -48,7 +53,7 @@ class Tracing:
 
     # Trace the target and write the trace log to a file
     def log_trace(self, target):
-        command = f'strace --follow-forks --decode-fds=path --trace=%file --string-limit=999 --quiet=all --successful-only --output=trace.log bash {target} 2>&1'
+        command = f'strace --follow-forks --decode-fds=path --trace=%file,%network --string-limit=999 --quiet=all --successful-only --output=trace.log bash {target} 2>&1'
         subprocess.run(command, shell=True)
 
     # Parse distinct paths from system trace and write them to a file
@@ -60,6 +65,14 @@ class Tracing:
         paths = list(set([path for path in paths if os.path.exists(path)]))
         with open('paths.log', 'w') as log:
             log.writelines("\n".join(paths))
+
+    # Generate a trace summary for missing/unresolvable features from the trace logs
+    def log_summary(self):
+        signals = [script[0] for script in self.scripts]
+        summary = [''.join(re.findall("(?<=\\s)(.*)(?=\\s\\=)", trace)).replace(getpass.getuser(), "USERNAME") for trace in self.trace if re.findall("^(.*?)(?=\\s)", trace)[0] in signals]
+        summary = list(dict.fromkeys(summary))
+        with open('summary.log', 'w') as log:
+            log.writelines("\n".join(summary))
 
     #========================================================================================================
     #                            PARSE CONFIGURATION INFORMATION FROM TRACE-RELATED LOGS
@@ -106,62 +119,63 @@ class Tracing:
             except ModuleNotFoundError:
                 # Files that are not Python Modules
                 pass
+            except Exception:
+                # Miscellaneous Import Errors
+                pass
         requirements.sort()
         return requirements
 
     # Parse configuration of a script used in target
     def parse_scripts(self, script=None):
-        execve = [list(eval(re.findall("\\[(.+?)\\]", trace)[0])) for trace in self.trace if 'execve' in trace and not '<... execve resumed>' in trace]
-        args = [arg for arg in execve if script == None or arg[0] == script]
-        args = [[]] if len(args) == 0 else args
-        return args
+        # Find all program execution calls, and their pids, in the trace log (e.g. ['1234', 'python3', 'test.py'])
+        execves = [[re.findall("^(.*?)(?=\\s)", trace)[0]] + re.findall("\\[(.+?)\\]", trace)[0].replace('"', '').split(', ') for trace in self.trace if 'execve' in trace and not '<... execve resumed>' in trace]
+
+        # Find the pids of all processes that were created directly by the target in the trace log
+        child_signals = [re.findall("(?<=si_pid=)\\d*", trace)[0] for trace in [trace for trace in self.trace if '--- SIGCHLD' in trace and re.findall("^(.*?)(?=\\s)", trace)[0] == execves[0][0]]]
+
+        # Find all the program execution calls that were directly invoked by the target
+        target_scripts = [execve[1:] for execve in execves if execve[0] in child_signals and script is None or execve[1] == script]
+        return target_scripts
     
+    # Parse port information
+    def parse_ports(self):
+        ports = [''.join(re.findall("(?<=sin_port=htons\\()\\d*", trace)) for trace in self.trace] # Attempt to find all references to ports in traces
+        ports = list(set([port for port in ports if port != ''])) # Remove all empty and/or duplicate ports
+        return ports
+
     # Parse job contrainers
     def parse_job_containers(self):
-        # Find scripts executed within docker containers
-        job_container_scripts = {}
-        job_container_scripts['docker'] = {'exec': []}
-        for parse in self.parse_scripts("docker"):
+        job_container_scripts = {'docker': {'img': [], 'exec': []}}
+        command = 'docker ps --no-trunc --format "{{.Image}}~{{.ID}}"'
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+
+        # Find scripts executed within docker containers        
+        containers = result.stdout.strip().splitlines()
+        containers = dict([container.split('~', 1) for container in containers])
+        containers = {image: id for image, id in containers.items()}
+        
+        images = []
+        for parse in self.scripts:
             if 'exec' in parse:
                 job_container_scripts['docker']['exec'].append(parse)
-
-        # Find images of docker containers
-        job_container_scripts['docker']['img'] = ''
-        if len(job_container_scripts['docker']['exec']) != 0: # Check if there are any scripts executed within the container
-            image = ''
-            if self.dockerfile != None: # Find the container image in dockerfile
-                with open(self.dockerfile, 'r') as file:
-                    dockerfile_content = file.readlines()
-                for line in dockerfile_content:
-                    if line.startswith('FROM'):
-                        image = line.split(' ')[1]
-            else: # Find the container image in docker run statements
-                for script in self.scripts:
-                    if ' '.join(script[:2]) == 'docker run':
-                        image = [syntax for syntax in script[3:] if syntax[0] != '-'][0]
-            job_container_scripts['docker']['img'] = image
+                images.extend([image for image, id in containers.items() if id in ' '.join(parse)])
+        images = list(set(images))
+        job_container_scripts['docker']['img'] = images
 
         return job_container_scripts
 
     # Parse service contrainers
     def parse_service_containers(self):
-        # Load container whitelist
-        with open('containers.json', 'r') as file:
-            whitelist = json.load(file)['service']
+        # Find the images and exposed ports of all running containers
+        command = 'docker ps --format "{{.Image}}~{{.Ports}}"'
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
 
-        # Find container instances in paths
-        containers = []
-        versionless_requirements = [requirement.split('==')[0] for requirement in self.requirements]
-        for requirement in versionless_requirements:
-            if requirement in whitelist:
-                containers.append(requirement)
+        # Parse containers into the following format: {'image:version': ['host-port-1:container:port-1', ...]}
+        containers = result.stdout.strip().splitlines()
+        containers = [container.split('~', 1) for container in containers]
+        containers = [[container[0], [re.findall("(?<=:).*", port)[0].replace("->",":") if "->" in port else '{0}:{1}'.format(re.findall(".+?(?=\\/)", port)[0], port) 
+                        for port in container[1].split(', ', 1)]] for container in containers]
 
-        # Find container instances in executions
-        for script in self.scripts:
-            for wlist in whitelist:
-                if script[0] in whitelist or script[0] in whitelist[wlist]:
-                    containers.append(wlist)
-                    break
-
-        containers = list(set(containers)) # Remove redundant containers
+        # Remove containers that do not have at least 1 port in the trace log (and are thus not being used by the target)
+        containers = [container for container in containers if len([port for port in container[1] if port.split(':')[0] in self.ports]) > 0]
         return containers

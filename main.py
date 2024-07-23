@@ -10,7 +10,7 @@ def parse_args():
     parser.add_argument('--template', dest='template', type=str, help='path to a workflow configuration template', default='dependencies.yaml')
     parser.add_argument('--workflow', dest='workflow', type=str, help='path to, or for, a workflow configuration', default='workflow.yaml')
     parser.add_argument('--workflow_name', dest='workflow_name', type=str, help='name for a new workflow configuration', default='workflow')
-    parser.add_argument('--dockerfile', dest='dockerfile', type=str, help='path to a dockerfile', default='Dockerfile')
+    parser.add_argument('--dockerfile', dest='dockerfile', type=str, help='path to a dockerfile', default=None)
     parser.add_argument('--new_trace', dest='new_trace', help='whether the target should be traced again', action='store_true')
     return parser.parse_args()
 
