@@ -11,10 +11,10 @@ import getpass
 class Tracing:
     def __init__(self,
                  new_trace = False,
+                 target = 'target.sh',
                  trace_log = 'trace.log',
                  paths_log = 'paths.log',
-                 target = 'target.sh',
-                 dockerfile = None):
+                 docker_log = 'docker.log'):
         # Load the trace logs (or create it if it do not exist)
         if new_trace or not os.path.exists(trace_log):
             self.log_trace(target=target)
@@ -42,10 +42,10 @@ class Tracing:
         self.ports = self.parse_ports()
         
         # Parse containers from system trace
-        self.dockerfile = dockerfile
-        self.job_containers = self.parse_job_containers()
+        self.docker_log = docker_log
+        self.docker = self.parse_docker()
+        self.job_container = self.parse_job_container()
         self.service_containers = self.parse_service_containers()
-
 
     #========================================================================================================
     #                                        GENERATE TRACE-RELATED LOGS
@@ -143,39 +143,37 @@ class Tracing:
         ports = list(set([port for port in ports if port != ''])) # Remove all empty and/or duplicate ports
         return ports
 
-    # Parse job contrainers
-    def parse_job_containers(self):
-        job_container_scripts = {'docker': {'img': [], 'exec': []}}
-        command = 'docker ps --no-trunc --format "{{.Image}}~{{.ID}}"'
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    # Parse docker information from the docker log
+    # - Docker Log == docker ps --no-trunc --format "{{.ID}}~{{.Names}}~{{.Image}}~{{.Ports}}"
+    def parse_docker(self):
+        # Find open the docker log and extract its container information
+        if not os.path.exists(self.docker_log):
+            return []
+        with open(self.docker_log, 'r') as log:
+            containers = list(log.read().splitlines())
 
-        # Find scripts executed within docker containers        
-        containers = result.stdout.strip().splitlines()
-        containers = dict([container.split('~', 1) for container in containers])
-        containers = {image: id for image, id in containers.items()}
+        # Parse containers into the following format: [[container_id-1, container_name-1, image:version-1, ['host-port-1:container:port-1', ...]]]
+        containers = [container.split('~') for container in containers]
+        containers = [container if container[3] != '' else [container[0], container[1], container[2], 'None/tcp'] for container in containers]
+        containers = [[container[0], container[1], container[2], [re.findall("(?<=:).*", port)[0].replace("->",":") if "->" in port else '{0}:{1}'.format(re.findall(".+?(?=\\/)", port)[0], port) 
+                for port in container[3].split(', ', 1)]] for container in containers]
+        containers = [{'id': container[0], 'name': container[1], 'image': container[2], 'ports': container[3]} for container in containers]
+        return containers
         
-        images = []
-        for parse in self.scripts:
-            if 'exec' in parse:
-                job_container_scripts['docker']['exec'].append(parse)
-                images.extend([image for image, id in containers.items() if id in ' '.join(parse)])
-        images = list(set(images))
-        job_container_scripts['docker']['img'] = images
-
-        return job_container_scripts
+    # Parse job contrainer
+    def parse_job_container(self):
+        command = 'cat /proc/self/cgroup | grep name=systemd'     
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        container_id = re.findall("(?<=15:name=systemd:\\/docker\/).*", result.stdout.strip())
+        for container in self.docker:
+            if container['id'] == container_id:
+                return container
+        return {'id': None, 'name': None, 'image': None, 'ports': None}
 
     # Parse service contrainers
     def parse_service_containers(self):
-        # Find the images and exposed ports of all running containers
-        command = 'docker ps --format "{{.Image}}~{{.Ports}}"'
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-
-        # Parse containers into the following format: {'image:version': ['host-port-1:container:port-1', ...]}
-        containers = result.stdout.strip().splitlines()
-        containers = [container.split('~', 1) for container in containers]
-        containers = [[container[0], [re.findall("(?<=:).*", port)[0].replace("->",":") if "->" in port else '{0}:{1}'.format(re.findall(".+?(?=\\/)", port)[0], port) 
-                        for port in container[1].split(', ', 1)]] for container in containers]
-
-        # Remove containers that do not have at least 1 port in the trace log (and are thus not being used by the target)
-        containers = [container for container in containers if len([port for port in container[1] if port.split(':')[0] in self.ports]) > 0]
+        execs = [script for script in self.scripts if script[0] == 'docker' and (script[1] == 'exec' or script[1] == 'container' and script[2] == 'exec')]
+        containers = [container for container in self.docker 
+                        if len([None for exec in execs if container['id'] in exec or container['name'] in exec]) > 0
+                        or len([port for port in container['ports'] if port.split(':')[0] in self.ports]) > 0]
         return containers

@@ -7,26 +7,22 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--target', dest='target', type=str, help='path to target bash script to be traced', default='target.sh')
     parser.add_argument('--requirement', dest='requirement', type=str, help='path to, or for, a pip requirements file', default='requirement.txt')
-    parser.add_argument('--template', dest='template', type=str, help='path to a workflow configuration template', default='dependencies.yaml')
     parser.add_argument('--workflow', dest='workflow', type=str, help='path to, or for, a workflow configuration', default='workflow.yaml')
-    parser.add_argument('--workflow_name', dest='workflow_name', type=str, help='name for a new workflow configuration', default='workflow')
-    parser.add_argument('--dockerfile', dest='dockerfile', type=str, help='path to a dockerfile', default=None)
+    parser.add_argument('--trace_log', dest='trace_log', type=str, help='path to, or for, a trace log', default='trace.log')
+    parser.add_argument('--paths_log', dest='paths_log', type=str, help='path to, or for, a path log', default='paths.log')
+    parser.add_argument('--docker_log', dest='docker_log', type=str, help='path to a log listing the docker containers on the machine', default='docker.log')
+    parser.add_argument('--workflow_name', dest='workflow_name', type=str, help='name for a new workflow configuration', default='Workflow')
     parser.add_argument('--new_trace', dest='new_trace', help='whether the target should be traced again', action='store_true')
     return parser.parse_args()
 
 
 def main():
-    # Parse runtime arguments
     args = parse_args()
-
-    # Trace the system calls of a target program
     tracing = Tracing(new_trace=args.new_trace,
-                      trace_log='trace.log',
-                      paths_log='paths.log',
+                      trace_log=args.trace_log,
+                      paths_log=args.paths_log,
                       target=args.target,
-                      dockerfile=args.dockerfile)
-
-    # Build and dump CI/CD YAML configuration from a system call trace
+                      docker_log=args.docker_log)
     ciyaml = YamlCI(tracing)
     ciyaml.dump(args.workflow)
 
