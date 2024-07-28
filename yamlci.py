@@ -1,7 +1,8 @@
 from tracing import Tracing
 import ruamel.yaml
 from ruamel.yaml import YAML
-from pathlib import Path
+from ruamel.yaml.scalarstring import LiteralScalarString
+import textwrap
 
 # Class that builds .yaml files for CI/CD environments
 class YamlCI:
@@ -33,6 +34,7 @@ class YamlCI:
 
         dependency_run = []
         if has_py:
+            job['steps'].append({'uses': 'actions/setup-python@v5', 'with': {'python-version': '${{ matrix.python-version }}', 'cache': 'pip'}})
             dependency_run.append('python -m pip install --upgrade pip wheel setuptools')
             if has_req_log:
                 dependency_run.append(f'pip install -r requirements.txt')
@@ -40,11 +42,8 @@ class YamlCI:
                 requirements_str = ' '.join([f'{module}=={version}' for module, version in requirements.items()])
                 dependency_run.append(f'pip install -I {requirements_str}')
         if len(dependency_run) > 0:
-            dependency_run_str = '; '.join(dependency_run)
-            job['steps'].append({'name': 'Install Python Dependencies', 'run': dependency_run_str})
-
-        run_str = '; '.join([' '.join(exps) for exps in run])
-        job['steps'].append({'name': name, 'run': run_str})
+            job['steps'].append({'name': 'Install Python Dependencies', 'run': self.get_multiline_str(dependency_run)})
+        job['steps'].append({'name': name, 'run': self.get_multiline_str([' '.join(exps) for exps in run])})
 
     # Specify a service container that an existing job should be able to use
     def add_service(self, job_id: str, name: str, image: str, ports: list[str]):
@@ -77,19 +76,16 @@ class YamlCI:
     # Dump the yaml file, as it has been built, to a file
     def dump(self, path: str):
         with open(path, 'w') as file:
-            yaml = YAML(typ='full', pure=True)
-            yaml.default_flow_style = False
+            ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
+            yaml = YAML()
             yaml.indent(sequence=4, offset=2)
             yaml.sort_base_mapping_type_on_output = False
             yaml.default_style = None
             yaml.width = 100
             yaml.ignore_aliases = lambda *args : True
-            yaml.dump(data=self.yaml,
-                      stream=file)
-            
-        # Remove aliases from yaml
-        file = Path(path)  
-        ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
-        yaml = YAML(pure=True)
-        data = yaml.load(file)
-        yaml.dump(data, file)
+            yaml.dump(data=self.yaml, stream=file)
+    
+    # Retrieve multiline string that will be rendered properly
+    def get_multiline_str(self, strs: list[str]):
+        newline_strs = '\n'.join(strs) + '\n'
+        return LiteralScalarString(textwrap.dedent(f"""{newline_strs}"""))
