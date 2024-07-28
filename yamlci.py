@@ -26,12 +26,24 @@ class YamlCI:
         job.update({'container': {'image': image, 'ports': ports}})
 
     # Add job steps to an existing job
-    def add_step(self, job_id: str, name: str, run: list[str], has_py: bool = False):
+    def add_step(self, job_id: str, name: str, run: list[str], has_py: bool = False, has_req_log: bool = False, requirements: dict[str, str] = []):
         job = self.yaml['jobs'][job_id]
         if 'steps' not in job:
             job.update({'steps': [{'uses': 'actions/checkout@v4'}]})
-        basic_dep = ['python -m pip install --upgrade pip wheel setuptools'] if has_py else []
-        run_str = '; '.join(basic_dep + [' '.join(exps) for exps in run])
+
+        dependency_run = []
+        if has_py:
+            dependency_run.append('python -m pip install --upgrade pip wheel setuptools')
+            if has_req_log:
+                dependency_run.append(f'pip install -r requirements.txt')
+            if len(requirements) > 0:
+                requirements_str = ' '.join([f'{module}=={version}' for module, version in requirements.items()])
+                dependency_run.append(f'pip install -I {requirements_str}')
+        if len(dependency_run) > 0:
+            dependency_run_str = '; '.join(dependency_run)
+            job['steps'].append({'name': 'Install Python Dependencies', 'run': dependency_run_str})
+
+        run_str = '; '.join([' '.join(exps) for exps in run])
         job['steps'].append({'name': name, 'run': run_str})
 
     # Specify a service container that an existing job should be able to use
@@ -56,7 +68,8 @@ class YamlCI:
             self.add_container(job_id, self.tracing.job_container['image'], self.tracing.job_container['ports'])
         if len(self.tracing.scripts) != 0:
             has_py = len(self.tracing.versions) != 0
-            self.add_step(job_id, 'Execute Test Scripts', self.tracing.scripts, has_py)
+            has_req_log = self.tracing.requirements_log is not None
+            self.add_step(job_id, 'Execute Test Scripts', self.tracing.scripts, has_py, has_req_log, self.tracing.requirements)
         for container in self.tracing.service_containers:
             name = container['image'] if ':' not in container['image'] else container['image'].split(':')[0]
             self.add_service(job_id, name, container['image'], container['ports'])
