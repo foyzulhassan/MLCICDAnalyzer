@@ -14,7 +14,8 @@ class Tracing:
                  target = 'target.sh',
                  trace_log = 'trace.log',
                  paths_log = 'paths.log',
-                 docker_log = 'docker.log'):
+                 docker_log = 'docker.log',
+                 requirements_log = 'requirements.txt'):
         # Load the trace logs (or create it if it do not exist)
         if new_trace or not os.path.exists(trace_log):
             self.log_trace(target=target)
@@ -36,9 +37,8 @@ class Tracing:
         
         # Parse runtime information from system trace
         self.versions = self.parse_versions()
-        self.requirements = self.parse_requirements()
-        with open('requirements.txt', 'w') as file:
-            file.write('\n'.join(self.requirements))
+        self.requirements_log = requirements_log if os.path.exists(requirements_log) else None
+        self.requirements = self.parse_requirements(requirements_log)
         self.ports = self.parse_ports()
         
         # Parse containers from system trace
@@ -88,11 +88,11 @@ class Tracing:
         versions = [version for version in versions if len(re.findall('^\\d\\..*', version)) != 0] # Remove general or non-sense versions from the single dimensional list
         return versions
 
-    # Parse requirements, or library/module dependencies
-    def parse_requirements(self):
+    # Parse requirements, or pip modules, that are not user-specified
+    def parse_requirements(self, requirements_log):
         # Parse module candidates found in the python package paths
         module_paths = sys.path + [site.USER_BASE] + [site.USER_SITE]
-        modules = []
+        modules_candidates = []
         for path in self.paths:
             for module_path in module_paths:
                 if module_path in path:
@@ -101,29 +101,25 @@ class Tracing:
                     except:
                         new_path = path.replace(module_path, '').split('/')[0].split('.')[0]
                     if new_path != '':
-                        modules.append(new_path)
+                        modules_candidates.append(new_path)
                     break
-        modules = list(set(modules))
+        modules_candidates = list(set(modules_candidates))
+
+        # Retrieve all modules that are installed on the system
+        command = f'pip freeze'
+        subprocess.run(command, shell=True, capture_output=True, text=True)
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        modules_installed = {module.split('==')[0].strip(): module.split('==')[1].strip() for module in result.stdout.splitlines()}
+
+        # Retrieve all the user-specified modules in the requirements log
+        modules_logged = {}
+        if os.path.exists(requirements_log):
+            with open(requirements_log, 'r') as log:
+                modules_logged = {module.split('==')[0].strip(): module.split('==')[1].strip() for module in log.readlines()}
         
-        # Select module candidates that are third-party python modules
-        requirements = []
-        for module in modules:
-            try:
-                # Third-Party Python Modules
-                module_name = importlib.import_module(module).__name__
-                module_version = importlib.metadata.version(module_name)
-                requirements.append(f'{module_name}=={module_version}')
-            except importlib.metadata.PackageNotFoundError:
-                # Built-In Python Modules
-                pass
-            except ModuleNotFoundError:
-                # Files that are not Python Modules
-                pass
-            except Exception:
-                # Miscellaneous Import Errors
-                pass
-        requirements.sort()
-        return requirements
+        # Remove module candidates that are not install on the system or have already been specified by the user
+        modules_parsed = {module: version for module, version in modules_installed.items() if module in modules_candidates and module not in modules_logged}
+        return modules_parsed
 
     # Parse configuration of a script used in target
     def parse_scripts(self, script=None):
