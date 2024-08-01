@@ -43,7 +43,7 @@ class YamlCI:
                 dependency_run.append(f'pip install -I {requirements_str}')
         if len(dependency_run) > 0:
             job['steps'].append({'name': 'Install Python Dependencies', 'run': self.get_multiline_str(dependency_run)})
-        job['steps'].append({'name': name, 'run': self.get_multiline_str([' '.join(exps) for exps in run])})
+        job['steps'].append({'name': name, 'run': self.get_multiline_str(run)})
 
     # Specify a service container that an existing job should be able to use
     def add_service(self, job_id: str, name: str, image: str, ports: list[str]):
@@ -68,10 +68,15 @@ class YamlCI:
         if len(self.tracing.scripts) != 0:
             has_py = len(self.tracing.versions) != 0
             has_req_log = self.tracing.requirements_log is not None
-            self.add_step(job_id, 'Execute Test Scripts', self.tracing.scripts, has_py, has_req_log, self.tracing.requirements)
+            script_strs = [' '.join(exps) for exps in self.tracing.scripts]
+            for i in range(len(script_strs)):
+                for container in self.tracing.service_containers:
+                    if container['id'] in script_strs[i]:
+                        script_strs[i] = script_strs[i].replace(container['id'], container['name'])
+                        break
+            self.add_step(job_id, 'Execute Test Scripts', script_strs, has_py, has_req_log, self.tracing.requirements)
         for container in self.tracing.service_containers:
-            name = container['image'] if ':' not in container['image'] else container['image'].split(':')[0]
-            self.add_service(job_id, name, container['image'], container['ports'])
+            self.add_service(job_id, container['name'], container['image'], container['ports'])
 
     # Dump the yaml file, as it has been built, to a file
     def dump(self, path: str):
