@@ -1,107 +1,95 @@
 from tracing import Tracing
 import ruamel.yaml
 from ruamel.yaml import YAML
-from pathlib import Path
+from ruamel.yaml.scalarstring import LiteralScalarString
+import textwrap
 
 # Class that builds .yaml files for CI/CD environments
 class YamlCI:
-    def __init__(self, tracing: Tracing, name='Workflow', triggers={'push': {'branches': ['main']}}):
-        self.yaml = {'name': name, 'on': triggers, 'jobs': {}}
-        self.tracing = tracing
-        self.set_job_containers()
-        self.set_basic_jobs()
-        self.set_service_containers()
+    def __init__(self, tracings: list[Tracing], name='Workflow'):
+        self.yaml = {'name': name, 'on': 'push', 'jobs': {}}
+        for tracing in tracings:
+            self.construct(tracing, tracing.target)
 
-    # Add jobs that use job containers to yaml
-    def set_job_containers(self):
-        # Stop if the job container does not have an image
-        if self.tracing.job_containers['docker']['img'] == []:
-            return
+    # Specify the virtual machine that will be used to run the application
+    def add_runner(self, job_id: str, runner: str):
+        job = self.yaml['jobs'][job_id]
+        job.update({'runs-on': runner})
 
-        # Add image to job container
-        self.yaml['jobs'].update({'job': {'runs-on': 'ubuntu-latest'}}) # Add runner to job container
-        self.yaml['jobs']['job'].update({'container': {'image': self.tracing.job_containers['docker']['img']}}) # Add container and image to job container
-        if self.tracing.versions != []:
-            self.yaml['jobs']['job'].update({'strategy': {}}) # Add strategy to job container
-        self.yaml['jobs']['job'].update({'steps': [{'uses': 'actions/checkout@v4'}]}) # Add repository checkout action to job container
+    # Define different job configurations using variables
+    def add_matrix(self, job_id: str, variables: dict[str, str]):
+        job = self.yaml['jobs'][job_id]
+        job.update({'strategy': {'matrix': variables}})
 
-        # Stop if job container does not have execution scripts
-        if len(self.tracing.job_containers['docker']['exec']) == 0:
-            return
-        
-        # Add execs to job container
-        docker = '; '.join([' '.join(script[6:]) for script in self.tracing.job_containers['docker']['exec']]) # Remove docker invocations from scripts
-        self.yaml['jobs']['job']['steps'].append({ # Add scripts to the job container execs
-            'name': 'Execute Docker Scripts',
-            'run': docker})
+    # Specify container in which steps in a job should run
+    def add_container(self, job_id: str, image: str, ports: list[str]):
+        job = self.yaml['jobs'][job_id]
+        job.update({'container': {'image': image, 'ports': ports}})
 
-    # Add jobs that use service containers to yaml
-    def set_service_containers(self):
-        # Stop if there are no service containers
-        if len(self.tracing.service_containers) == 0:
-            return
-        
-        # Add a job if it does not already exist
-        if len(self.yaml['jobs']) == 0:
-            self.yaml['jobs'].update({'job': {'runs-on': 'ubuntu-latest'}})
-        
-        # Add services to job
-        if len(self.tracing.service_containers) > 0:
-            self.yaml['jobs']['job'].update({'services': {}})
-            for container in self.tracing.service_containers:
-                image_name = container[0].split(':')[0]
-                if image_name not in self.yaml['jobs']['job']['services']:   
-                    self.yaml['jobs']['job']['services'].update({image_name: {'image': container[0], 'ports': container[1]}})
-                else:
-                    self.yaml['jobs']['job']['services'][image_name]['ports'].extend(container[1])
+    # Add job steps to an existing job
+    def add_step(self, job_id: str, name: str, run: list[str], has_py: bool = False, has_req_log: bool = False, requirements: dict[str, str] = []):
+        job = self.yaml['jobs'][job_id]
+        if 'steps' not in job:
+            job.update({'steps': [{'uses': 'actions/checkout@v4'}]})
 
-    # Add basic jobs that may use service containers to yaml
-    def set_basic_jobs(self):  
-        # Stop if there is no runtime version information
-        # if len(self.tracing.versions) == 0:
-        #     return
-        
-        # Add a job if it does not already exist
-        if len(self.yaml['jobs']) == 0:
-            self.yaml['jobs'].update({'job': {'runs-on': 'ubuntu-latest'}})
+        dependency_run = []
+        if has_py:
+            job['steps'].append({'uses': 'actions/setup-python@v5', 'with': {'python-version': '${{ matrix.python-version }}', 'cache': 'pip'}})
+            dependency_run.append('python -m pip install --upgrade pip wheel setuptools')
+            if has_req_log:
+                dependency_run.append(f'pip install -r requirements.txt')
+            if len(requirements) > 0:
+                requirements_str = ' '.join([f'{module}=={version}' for module, version in requirements.items()])
+                dependency_run.append(f'pip install -I {requirements_str}')
+        if len(dependency_run) > 0:
+            job['steps'].append({'name': 'Install Python Dependencies', 'run': self.get_multiline_str(dependency_run)})
+        job['steps'].append({'name': name, 'run': self.get_multiline_str(run)})
 
-        # Add basic runtime configurations
-        if self.tracing.versions != []:
-            self.yaml['jobs']['job'].update({'strategy': {'matrix': {'python-version': self.tracing.versions}}}) # Add python-versions
-        if 'steps' not in self.yaml['jobs']['job']:
-            self.yaml['jobs']['job'].update({'steps': [{'uses': 'actions/checkout@v4'}]}) # Add steps to basic job
-        
-        # Add runtime setup and install dependencies
-        if self.tracing.versions != []:
-            self.yaml['jobs']['job']['steps'].extend( 
-                [{'name': 'Setup Python ${{ matrix.python-version }}',
-                'uses': 'actions/setup-python@v4',
-                'with': {'python-version': '${{ matrix.python-version }}'}},
-                {'name': 'Install Dependencies',
-                'run': f'python -m pip install --upgrade pip; pip install -r requirements.txt'}])
-
-        # Add additional runtime scripts
-        compiled_script = '; '.join([' '.join(script) for script in self.tracing.scripts if 'docker' not in script[0]])
-        if len(compiled_script) > 0:
-            self.yaml['jobs']['job']['steps'].append({'name': 'Execute Basic Scripts', 'run': compiled_script})
+    # Specify a service container that an existing job should be able to use
+    def add_service(self, job_id: str, name: str, image: str, ports: list[str]):
+        job = self.yaml['jobs'][job_id]
+        if 'services' not in job:
+            job.update({'services': {}})
+        if name not in job['services']:
+            job['services'].update({name: {'image': image, 'ports': ports}})
+        else:
+            job['services'][name]['ports'].extend(ports)
+    
+    # Contrust the yaml file using trace information
+    def construct(self, tracing: Tracing, job_id='job'):
+        if job_id not in self.yaml['jobs']:
+            self.yaml['jobs'].update({job_id: {}})
+        self.add_runner(job_id, 'ubuntu-latest')
+        if len(tracing.versions) != 0:
+            self.add_matrix(job_id, {'python-version': tracing.versions})
+        if tracing.job_container['image'] is not None:
+            self.add_container(job_id, tracing.job_container['image'], tracing.job_container['ports'])
+        if len(tracing.scripts) != 0:
+            has_py = len(tracing.versions) != 0
+            has_req_log = tracing.requirements_log is not None
+            script_strs = [' '.join(exps) for exps in tracing.scripts]
+            for i in range(len(script_strs)):
+                for container in tracing.service_containers:
+                    if container['id'] in script_strs[i]:
+                        script_strs[i] = script_strs[i].replace(container['id'], container['name'])
+                        break
+            self.add_step(job_id, 'Execute Test Scripts', script_strs, has_py, has_req_log, tracing.requirements)
+        for container in tracing.service_containers:
+            self.add_service(job_id, container['name'], container['image'], container['ports'])
 
     # Dump the yaml file, as it has been built, to a file
     def dump(self, path: str):
         with open(path, 'w') as file:
-            yaml = YAML(typ='full', pure=True)
-            yaml.default_flow_style = False
+            ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
+            yaml = YAML()
             yaml.indent(sequence=4, offset=2)
             yaml.sort_base_mapping_type_on_output = False
             yaml.default_style = None
             yaml.width = 100
             yaml.ignore_aliases = lambda *args : True
-            yaml.dump(data=self.yaml,
-                      stream=file)
-            
-        # Remove aliases from yaml
-        # TODO: Find cleaner way to remove aliases
-        file = Path(path)  
-        ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
-        yaml = YAML(pure=True)
-        data = yaml.load(file)
-        yaml.dump(data, file)
+            yaml.dump(data=self.yaml, stream=file)
+    
+    # Retrieve multiline string that will be rendered properly
+    def get_multiline_str(self, strs: list[str]):
+        newline_strs = '\n'.join(strs) + '\n'
+        return LiteralScalarString(textwrap.dedent(f"""{newline_strs}"""))
