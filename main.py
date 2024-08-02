@@ -1,10 +1,11 @@
 import argparse
 from tracing import Tracing
 from yamlci import YamlCI
+import os
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--target', dest='target', type=str, help='path to target bash script to be traced', default='target.sh')
+    parser.add_argument('--target', dest='target', type=str, help='path to target bash script, or directory of scripts, to be traced', default='target.sh')
     parser.add_argument('--host_container', dest='host_container', type=str, help='id of the container that the target is running in', default=None)
     parser.add_argument('--requirements', dest='requirements_log', type=str, help='path to a pip requirements file', default='requirements.txt')
     parser.add_argument('--workflow', dest='workflow', type=str, help='path to, or for, a workflow configuration', default='workflow.yaml')
@@ -18,14 +19,18 @@ def parse_args():
 
 def main():
     args = parse_args()
-    tracing = Tracing(new_trace=args.new_trace,
-                      host_container=args.host_container,
-                      trace_log=args.trace_log,
-                      paths_log=args.paths_log,
-                      target=args.target,
-                      docker_log=args.docker_log,
-                      requirements_log=args.requirements_log)
-    ciyaml = YamlCI(tracing)
+    targets = [f'{args.target}/{path}' for path in os.listdir(args.target) if os.path.isfile(os.path.abspath(f'{args.target}/{path}'))] if os.path.isdir(args.target) else [args.target]
+    targets.reverse()
+    tracings = []
+    for target in targets:
+        tracings.append(Tracing(target=target,
+                        new_trace=args.new_trace,
+                        host_container=args.host_container,
+                        trace_log=args.trace_log,
+                        paths_log=args.paths_log,
+                        docker_log=args.docker_log,
+                        requirements_log=args.requirements_log))
+    ciyaml = YamlCI(tracings)
     ciyaml.dump(args.workflow)
 
 
