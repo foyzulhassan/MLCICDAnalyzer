@@ -2,10 +2,10 @@ import argparse
 from tracing import Tracing
 from yamlci import YamlCI
 
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--target', dest='target', type=str, help='path to target bash script to be traced', default='target.sh')
+    parser.add_argument('--host_container', dest='host_container', type=str, help='id of the container that the target is running in', default=None)
     parser.add_argument('--requirements', dest='requirements_log', type=str, help='path to a pip requirements file', default='requirements.txt')
     parser.add_argument('--workflow', dest='workflow', type=str, help='path to, or for, a workflow configuration', default='workflow.yaml')
     parser.add_argument('--trace_log', dest='trace_log', type=str, help='path to, or for, a trace log', default='trace.log')
@@ -19,6 +19,7 @@ def parse_args():
 def main():
     args = parse_args()
     tracing = Tracing(new_trace=args.new_trace,
+                      host_container=args.host_container,
                       trace_log=args.trace_log,
                       paths_log=args.paths_log,
                       target=args.target,
