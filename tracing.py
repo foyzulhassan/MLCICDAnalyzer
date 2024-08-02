@@ -107,10 +107,8 @@ class Tracing:
         for path in self.paths:
             for module_path in module_paths:
                 if module_path in path:
-                    try:
-                        new_path = path.replace(module_path, '').split('/')[1].split('.')[0]
-                    except:
-                        new_path = path.replace(module_path, '').split('/')[0].split('.')[0]
+                    new_path = path.replace(module_path, '').replace('/','.')
+                    new_path = new_path[1:] if len(new_path) > 0 and new_path[0] == '.' else new_path
                     if new_path != '':
                         modules_candidates.append(new_path)
                         break
