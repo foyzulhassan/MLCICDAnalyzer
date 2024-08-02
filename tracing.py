@@ -16,6 +16,7 @@ class Tracing:
                  docker_log = 'docker.log',
                  requirements_log = 'requirements.txt'):
         # Load the trace logs (or create it if it do not exist)
+        self.target = target
         if new_trace or not os.path.exists(trace_log):
             self.log_trace(target, host_container)
         with open(trace_log, 'r') as log:

@@ -6,10 +6,10 @@ import textwrap
 
 # Class that builds .yaml files for CI/CD environments
 class YamlCI:
-    def __init__(self, tracing: Tracing, name='Workflow'):
+    def __init__(self, tracings: list[Tracing], name='Workflow'):
         self.yaml = {'name': name, 'on': 'push', 'jobs': {}}
-        self.tracing = tracing
-        self.construct()
+        for tracing in tracings:
+            self.construct(tracing, tracing.target)
 
     # Specify the virtual machine that will be used to run the application
     def add_runner(self, job_id: str, runner: str):
@@ -56,26 +56,25 @@ class YamlCI:
             job['services'][name]['ports'].extend(ports)
     
     # Contrust the yaml file using trace information
-    def construct(self):
-        job_id = "job"
+    def construct(self, tracing: Tracing, job_id='job'):
         if job_id not in self.yaml['jobs']:
             self.yaml['jobs'].update({job_id: {}})
         self.add_runner(job_id, 'ubuntu-latest')
-        if len(self.tracing.versions) != 0:
-            self.add_matrix(job_id, {'python-version': self.tracing.versions})
-        if self.tracing.job_container['image'] is not None:
-            self.add_container(job_id, self.tracing.job_container['image'], self.tracing.job_container['ports'])
-        if len(self.tracing.scripts) != 0:
-            has_py = len(self.tracing.versions) != 0
-            has_req_log = self.tracing.requirements_log is not None
-            script_strs = [' '.join(exps) for exps in self.tracing.scripts]
+        if len(tracing.versions) != 0:
+            self.add_matrix(job_id, {'python-version': tracing.versions})
+        if tracing.job_container['image'] is not None:
+            self.add_container(job_id, tracing.job_container['image'], tracing.job_container['ports'])
+        if len(tracing.scripts) != 0:
+            has_py = len(tracing.versions) != 0
+            has_req_log = tracing.requirements_log is not None
+            script_strs = [' '.join(exps) for exps in tracing.scripts]
             for i in range(len(script_strs)):
-                for container in self.tracing.service_containers:
+                for container in tracing.service_containers:
                     if container['id'] in script_strs[i]:
                         script_strs[i] = script_strs[i].replace(container['id'], container['name'])
                         break
-            self.add_step(job_id, 'Execute Test Scripts', script_strs, has_py, has_req_log, self.tracing.requirements)
-        for container in self.tracing.service_containers:
+            self.add_step(job_id, 'Execute Test Scripts', script_strs, has_py, has_req_log, tracing.requirements)
+        for container in tracing.service_containers:
             self.add_service(job_id, container['name'], container['image'], container['ports'])
 
     # Dump the yaml file, as it has been built, to a file
