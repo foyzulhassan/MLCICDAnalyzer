@@ -117,6 +117,8 @@ class Tracing:
 
         # Retrieve all modules that are installed on the system
         command = f'pip freeze'
+        if host_container is not None:
+            command = f'docker exec -i {host_container} {command}'
         subprocess.run(command, shell=True, capture_output=True, text=True)
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
         modules_installed = {module.split('==')[0].strip(): module.split('==')[1].strip() for module in result.stdout.splitlines()}
