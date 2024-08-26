@@ -6,6 +6,8 @@ import ruamel.yaml
 import codebleu
 import graphtage
 import matplotlib.pyplot as plt
+from datetime import datetime
+from collections import OrderedDict
 
 def calc_shared_lines(reference: str, hypothesis: str) -> float:
     """Caclulate the proportion of shared lines between strings (ignoring leading/trailing whitespace and order)"""
@@ -70,7 +72,7 @@ def evaluate_batch(batch: dict[str, list[str]], reference_name: str):
             result[group][basename] = complete_evaluation(reference_path, hypothesis_path)
     return result
 
-def organize_batch_result(batch_result: dict):
+def organize_batch_result(batch_result: dict, dump: bool = False):
     """Parse batch result to produce something that is easier to plot"""
     metrics = list(list(list(batch_result.values())[0].values())[0].keys())
     organized_result = {metric: {} for metric in metrics}
@@ -80,17 +82,25 @@ def organize_batch_result(batch_result: dict):
                 if version not in organized_result[metric]:
                     organized_result[metric][version] = []
                 organized_result[metric][version].append(value)
+    if dump:
+        with open(f"{datetime.now().strftime('%m-%d-%y_%H-%M-%S')}-result.json", 'w') as file:
+            json.dump(organized_result, file)
     return organized_result
 
-def plot_batch_result(organized_result: dict, rows: int = 2, cols: int = 4):
+def plot_batch_result(organized_result: dict, rows: int = 2, cols: int = 4, order: list = None):
     """Plot organized batch results"""
-    versions = list(map(lambda x: x.split('.')[0], list(list(organized_result.values())[0].keys())))
+    results = organized_result
+    versions: list[str] = list(list(list(results.values())[0].keys()))
+    if order is not None and set(versions) == set(order):
+        versions = order
+        results = {metric: OrderedDict((yaml, yamls[yaml]) for yaml in order) for metric, yamls in results.items()}
+    versions = [version.removesuffix('.yaml').removesuffix('.yml') for version in versions]
     figure, xaxes = plt.subplots(rows, cols)
     locations = list(itertools.product(range(rows), range(cols)))
-    for i, (metric, values) in enumerate(organized_result.items()):
-        data = list(list(values.values()))
+    for i, (metric, yamls) in enumerate(results.items()):
+        data = list(list(yamls.values()))
         row, col = locations[i]
-        xaxes[row, col].boxplot(data)
+        xaxes[row, col].boxplot(data, showmeans=True)
         xaxes[row, col].set_title(metric)
         xaxes[row, col].set_xticklabels(versions)
         xaxes[row, col].get_xaxis().tick_bottom()
@@ -102,28 +112,29 @@ def plot_batch_result(organized_result: dict, rows: int = 2, cols: int = 4):
 def parse_args():
     """Parse CLI arguments and return them"""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--reference', dest='reference_path', type=str, help='Filename of YAML that is being approximated')
-    parser.add_argument('--hypothesis', dest='hypothesis_path', type=str, help='Filename of YAML that is approximating the target')
-    parser.add_argument('--batch', dest='batch_path', type=str, help='Batch evaluation using a directory of sub-directories that contain YAMLs')
+    parser.add_argument('--single', dest='single_paths', nargs="2", help='Paths to the reference YAML and the hypothesis YAML')
+    parser.add_argument('--batch', dest='batch_info', nargs="2", help='Batch evaluation using a directory of sub-directories that contain YAMLs')
+    parser.add_argument('--save', dest='save', help='Whether evaluation logs should be saved', action='store_true')
+    parser.add_argument('--plot', dest='plot_path', type=str, help='Plot an existing evaluation log')
+    parser.add_argument('--order', dest='plot_order', nargs="+", help='Order to plot the YAMLs in a batch directory')
     return parser.parse_args()
 
 def main():
     args = parse_args()
 
-    if args.batch_path and args.reference_path:
-        batch = load_batch(args.batch_path)
-        reference_name = args.reference_path
-        batch_result = evaluate_batch(batch, reference_name)
-        organized_result = organize_batch_result(batch_result)
-        plot_batch_result(organized_result)
-    elif args.reference_path and args.hypothesis_path:
-        print(complete_evaluation(args.reference_path, args.hypothesis_path))
-    elif args.batch_path and not args.reference_path:
-        print('"--reference PATH_TO_REFERENCE" not set')
-    elif args.reference_path and not args.hypothesis_path:
-        print('"--hypothesis PATH_TO_HYPOTHESIS" not set')
-    elif not args.reference_path and args.hypothesis_path:
-        print('"--reference PATH_TO_REFERENCE" not set')
+    if args.plot_path:
+        with open(args.plot_path, 'r') as file:
+            organized_result = json.load(file)
+        plot_batch_result(organized_result, order=args.plot_order)
+    elif args.batch_info:
+        batch_path, reference_filename = args.batch_info[0], args.batch_info[1]
+        batch = load_batch(batch_path)
+        batch_result = evaluate_batch(batch, reference_filename)
+        organized_result = organize_batch_result(batch_result, args.save)
+        plot_batch_result(organized_result, order=args.plot_order)
+    elif args.single_paths:
+        reference_path, hypothesis_path = args.single_paths[0], args.single_paths[1]
+        print(complete_evaluation(reference_path, hypothesis_path))
 
 if __name__ == '__main__':
     main()
