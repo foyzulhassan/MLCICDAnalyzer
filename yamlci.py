@@ -67,13 +67,12 @@ class YamlCI:
         if len(tracing.scripts) != 0:
             has_py = len(tracing.versions) != 0
             has_req_log = tracing.requirements_log is not None
-            script_strs = [' '.join(exps) for exps in tracing.scripts]
-            for i in range(len(script_strs)):
+            for i in range(len(tracing.scripts)):
                 for container in tracing.service_containers:
-                    if container['id'] in script_strs[i]:
-                        script_strs[i] = script_strs[i].replace(container['id'], container['name'])
+                    if container['id'] in tracing.scripts[i]:
+                        tracing.scripts[i] = tracing.scripts[i].replace(container['id'], container['name'])
                         break
-            self.add_step(job_id, 'Execute Test Scripts', script_strs, has_py, has_req_log, tracing.requirements)
+            self.add_step(job_id, 'Execute Test Scripts', tracing.scripts, has_py, has_req_log, tracing.requirements)
         for container in tracing.service_containers:
             self.add_service(job_id, container['name'], container['image'], container['ports'])
 
