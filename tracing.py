@@ -3,7 +3,6 @@ import os
 import site
 import subprocess
 import re
-import getpass
 
 # Class that initiates and parses system traces of a program
 class Tracing:
@@ -74,11 +73,7 @@ class Tracing:
         
     # Generate a trace summary for missing/unresolvable features from the trace logs
     def log_summary(self):
-        signals = [script[0] for script in self.scripts]
-        summary = [''.join(re.findall("(?<=\\s)(.*)(?=\\s\\=)", trace)).replace(getpass.getuser(), "USERNAME") for trace in self.trace if re.findall("^(.*?)(?=\\s)", trace)[0] in signals]
-        summary = list(dict.fromkeys(summary))
-        with open('summary.log', 'w') as log:
-            log.writelines("\n".join(summary))
+        pass
 
     #========================================================================================================
     #                            PARSE CONFIGURATION INFORMATION FROM TRACE-RELATED LOGS
@@ -121,8 +116,14 @@ class Tracing:
             command = f'docker exec -i {host_container} {command}'
         subprocess.run(command, shell=True, capture_output=True, text=True)
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        modules_installed = {module.split('==')[0].strip(): module.split('==')[1].strip() for module in result.stdout.splitlines()}
-
+        modules_installed = {}
+        for module in result.stdout.splitlines():
+            module_parsed = {module: ''}
+            if any(delim in module for delim in ['<','>','=']):
+                module_split = re.split('[<>=]', module, 1)
+                module_parsed = {module_split[0].strip(): module_split[1].strip()[1:]}
+            modules_installed.update(module_parsed)
+                
         # Retrieve all the user-specified modules in the requirements log
         modules_logged = {}
         if host_container is not None:
@@ -130,23 +131,25 @@ class Tracing:
             subprocess.run(command, shell=True)
         if os.path.exists(requirements_log):
             with open(requirements_log, 'r') as log:
-                modules_logged = {module.split('==')[0].strip(): module.split('==')[1].strip() for module in log.readlines() if module.strip() != ''}
-        
+                modules_nonempty = [module for module in log.readlines() if module.strip() != '']
+            modules_logged = {}
+            for module in modules_nonempty:
+                module_parsed = {module: ''}
+                if any(delim in module for delim in ['<','>','=']):
+                    module_split = re.split('[<>=]', module, 1)
+                    module_parsed = {module_split[0].strip(): module_split[1].strip()[1:]}
+                modules_logged.update(module_parsed)
+
         # Remove module candidates that are not install on the system or have already been specified by the user
         modules_parsed = {module: version for module, version in modules_installed.items() if module in modules_candidates and module not in modules_logged}
         return modules_parsed
 
     # Parse configuration of a script used in target
-    def parse_scripts(self, script=None):
-        # Find all program execution calls, and their pids, in the trace log (e.g. ['1234', 'python3', 'test.py'])
-        execves = [[re.findall("^(.*?)(?=\\s)", trace)[0]] + re.findall("\\[(.+?)\\]", trace)[0].replace('"', '').split(', ') for trace in self.trace if 'execve' in trace and not '<... execve resumed>' in trace]
-
-        # Find the pids of all processes that were created directly by the target in the trace log
-        child_signals = [re.findall("(?<=si_pid=)\\d*", trace)[0] for trace in [trace for trace in self.trace if '--- SIGCHLD' in trace and re.findall("^(.*?)(?=\\s)", trace)[0] == execves[0][0]]]
-
-        # Find all the program execution calls that were directly invoked by the target
-        target_scripts = [execve[1:] for execve in execves if execve[0] in child_signals and script is None or execve[1] == script]
-        return target_scripts
+    def parse_scripts(self):
+        # Because system call logs do not properly reproduce the pipes, redirects, etc. in the target, log parsing isn't used here
+        with open(self.target, 'r') as file:
+            scripts = [script.strip() for script in file.readlines()]
+        return scripts
     
     # Parse port information
     def parse_ports(self):
@@ -183,7 +186,7 @@ class Tracing:
 
     # Parse service contrainers
     def parse_service_containers(self):
-        execs = [script for script in self.scripts if script[0] == 'docker' and (script[1] == 'exec' or script[1] == 'container' and script[2] == 'exec')]
+        execs = [script for script in self.scripts if script.startswith('docker exec') or script.startswith('docker container exec')]
         containers = [container for container in self.docker 
                         if len([None for exec in execs if container['id'] in exec or container['name'] in exec]) > 0
                         or len([port for port in container['ports'] if port.split(':')[0] in self.ports]) > 0]
