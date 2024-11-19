@@ -1,0 +1,227 @@
+{
+    "yml_analysis": {
+        "validation": {
+            "status": "valid",
+            "message": "YAML is valid and complete for GitHub Actions."
+        },
+        "build": {
+            "build_step_0_working_directory": {
+                "recommendation": "Add 'working-directory' to avoid ambiguity.",
+                "status": "missing",
+                "original": {
+                    "uses": "actions/checkout@v4",
+                    "working-directory": "./src"
+                },
+                "updated": {
+                    "uses": "actions/checkout@v4",
+                    "working-directory": "./src"
+                }
+            },
+            "build_step_1_working_directory": {
+                "recommendation": "Add 'working-directory' to avoid ambiguity.",
+                "status": "missing",
+                "original": {
+                    "uses": "actions/setup-python@v5",
+                    "with": {
+                        "python-version": "${{ matrix.python-version }}",
+                        "cache": "pip"
+                    },
+                    "working-directory": "./src"
+                },
+                "updated": {
+                    "uses": "actions/setup-python@v5",
+                    "with": {
+                        "python-version": "${{ matrix.python-version }}",
+                        "cache": "pip"
+                    },
+                    "working-directory": "./src"
+                }
+            },
+            "build_step_2_working_directory": {
+                "recommendation": "Add 'working-directory' to avoid ambiguity.",
+                "status": "missing",
+                "original": {
+                    "name": "Install Python Dependencies",
+                    "run": "python -m pip install --upgrade pip wheel setuptools\npip install -r requirements.txt\npip install -I cachetools==5.4.0 chardet==5.2.0 colorama==0.4.6 distlib==0.3.8 filelock==3.15.4 packaging==24.1 platformdirs==4.2.2 pluggy==1.5.0 setuptools==68.1.2 tox==4.17.1 virtualenv==20.26.3\n",
+                    "working-directory": "./src"
+                },
+                "updated": {
+                    "name": "Install Python Dependencies",
+                    "run": "python -m pip install --upgrade pip wheel setuptools\npip install -r requirements.txt\npip install -I cachetools==5.4.0 chardet==5.2.0 colorama==0.4.6 distlib==0.3.8 filelock==3.15.4 packaging==24.1 platformdirs==4.2.2 pluggy==1.5.0 setuptools==68.1.2 tox==4.17.1 virtualenv==20.26.3\n",
+                    "working-directory": "./src"
+                }
+            },
+            "build_step_3_working_directory": {
+                "recommendation": "Add 'working-directory' to avoid ambiguity.",
+                "status": "missing",
+                "original": {
+                    "name": "Execute Test Scripts",
+                    "run": "python3 setup.py check\ntox",
+                    "working-directory": "./src"
+                },
+                "updated": {
+                    "name": "Execute Test Scripts",
+                    "run": "python3 setup.py check\ntox",
+                    "working-directory": "./src"
+                }
+            },
+            "build_concurrency": {
+                "recommendation": "Add concurrency control to avoid job overlaps.",
+                "status": "missing",
+                "original": {
+                    "runs-on": "ubuntu-latest",
+                    "strategy": {
+                        "matrix": {
+                            "python-version": [
+                                "3.8",
+                                "3.9",
+                                "3.10"
+                            ]
+                        }
+                    },
+                    "steps": [
+                        {
+                            "uses": "actions/checkout@v4",
+                            "working-directory": "./src"
+                        },
+                        {
+                            "uses": "actions/setup-python@v5",
+                            "with": {
+                                "python-version": "${{ matrix.python-version }}",
+                                "cache": "pip"
+                            },
+                            "working-directory": "./src"
+                        },
+                        {
+                            "name": "Install Python Dependencies",
+                            "run": "python -m pip install --upgrade pip wheel setuptools\npip install -r requirements.txt\npip install -I cachetools==5.4.0 chardet==5.2.0 colorama==0.4.6 distlib==0.3.8 filelock==3.15.4 packaging==24.1 platformdirs==4.2.2 pluggy==1.5.0 setuptools==68.1.2 tox==4.17.1 virtualenv==20.26.3\n",
+                            "working-directory": "./src"
+                        },
+                        {
+                            "name": "Execute Test Scripts",
+                            "run": "python3 setup.py check\ntox",
+                            "working-directory": "./src"
+                        }
+                    ]
+                },
+                "updated": {
+                    "runs-on": "ubuntu-latest",
+                    "strategy": {
+                        "matrix": {
+                            "python-version": [
+                                "3.8",
+                                "3.9",
+                                "3.10"
+                            ]
+                        }
+                    },
+                    "steps": [
+                        {
+                            "uses": "actions/checkout@v4",
+                            "working-directory": "./src"
+                        },
+                        {
+                            "uses": "actions/setup-python@v5",
+                            "with": {
+                                "python-version": "${{ matrix.python-version }}",
+                                "cache": "pip"
+                            },
+                            "working-directory": "./src"
+                        },
+                        {
+                            "name": "Install Python Dependencies",
+                            "run": "python -m pip install --upgrade pip wheel setuptools\npip install -r requirements.txt\npip install -I cachetools==5.4.0 chardet==5.2.0 colorama==0.4.6 distlib==0.3.8 filelock==3.15.4 packaging==24.1 platformdirs==4.2.2 pluggy==1.5.0 setuptools==68.1.2 tox==4.17.1 virtualenv==20.26.3\n",
+                            "working-directory": "./src"
+                        },
+                        {
+                            "name": "Execute Test Scripts",
+                            "run": "python3 setup.py check\ntox",
+                            "working-directory": "./src"
+                        }
+                    ],
+                    "concurrency": "build-group"
+                }
+            },
+            "build_environment": {
+                "recommendation": "Add 'environment' variables to control environments and security.",
+                "status": "missing",
+                "original": {
+                    "runs-on": "ubuntu-latest",
+                    "strategy": {
+                        "matrix": {
+                            "python-version": [
+                                "3.8",
+                                "3.9",
+                                "3.10"
+                            ]
+                        }
+                    },
+                    "steps": [
+                        {
+                            "uses": "actions/checkout@v4",
+                            "working-directory": "./src"
+                        },
+                        {
+                            "uses": "actions/setup-python@v5",
+                            "with": {
+                                "python-version": "${{ matrix.python-version }}",
+                                "cache": "pip"
+                            },
+                            "working-directory": "./src"
+                        },
+                        {
+                            "name": "Install Python Dependencies",
+                            "run": "python -m pip install --upgrade pip wheel setuptools\npip install -r requirements.txt\npip install -I cachetools==5.4.0 chardet==5.2.0 colorama==0.4.6 distlib==0.3.8 filelock==3.15.4 packaging==24.1 platformdirs==4.2.2 pluggy==1.5.0 setuptools==68.1.2 tox==4.17.1 virtualenv==20.26.3\n",
+                            "working-directory": "./src"
+                        },
+                        {
+                            "name": "Execute Test Scripts",
+                            "run": "python3 setup.py check\ntox",
+                            "working-directory": "./src"
+                        }
+                    ]
+                },
+                "updated": {
+                    "runs-on": "ubuntu-latest",
+                    "strategy": {
+                        "matrix": {
+                            "python-version": [
+                                "3.8",
+                                "3.9",
+                                "3.10"
+                            ]
+                        }
+                    },
+                    "steps": [
+                        {
+                            "uses": "actions/checkout@v4",
+                            "working-directory": "./src"
+                        },
+                        {
+                            "uses": "actions/setup-python@v5",
+                            "with": {
+                                "python-version": "${{ matrix.python-version }}",
+                                "cache": "pip"
+                            },
+                            "working-directory": "./src"
+                        },
+                        {
+                            "name": "Install Python Dependencies",
+                            "run": "python -m pip install --upgrade pip wheel setuptools\npip install -r requirements.txt\npip install -I cachetools==5.4.0 chardet==5.2.0 colorama==0.4.6 distlib==0.3.8 filelock==3.15.4 packaging==24.1 platformdirs==4.2.2 pluggy==1.5.0 setuptools==68.1.2 tox==4.17.1 virtualenv==20.26.3\n",
+                            "working-directory": "./src"
+                        },
+                        {
+                            "name": "Execute Test Scripts",
+                            "run": "python3 setup.py check\ntox",
+                            "working-directory": "./src"
+                        }
+                    ],
+                    "environment": {
+                        "ENVIRONMENT": "production",
+                        "DEPLOY_KEY": "${{ secrets.DEPLOY_KEY }}"
+                    }
+                }
+            }
+        }
+    }
+}

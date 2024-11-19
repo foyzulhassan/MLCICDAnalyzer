@@ -1,0 +1,8 @@
+1. The name of this workflow should be "YOLOv5 CI"
+2. This workflow should be triggered on push and pull requests 
+3. This workflow should be triggered when the main branch is modified
+4. This workflow should be triggered at 00:00 UTC every day
+5. This workflow should be able to be triggered manually
+6. The job named "Benchmarks" should include job configurations for ubuntu with python version 3.11 and model yolov5n
+7. The job named "Tests" should include job configurations for ubuntu, windows, and mac with python version 3.11 and model yolov5n
+8. The job named "Tests" should include job configurations for ubuntu with python version 3.11, model yolov5n, and torch 1.8.0

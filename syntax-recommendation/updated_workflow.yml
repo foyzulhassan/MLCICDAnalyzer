@@ -1,0 +1,41 @@
+name: CI
+on:
+  push:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+        - '3.8'
+        - '3.9'
+        - '3.10'
+    steps:
+    - uses: actions/checkout@v4
+# Recommendation: Add 'working-directory' to avoid ambiguity.
+      working-directory: ./src
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: pip
+# Recommendation: Add 'working-directory' to avoid ambiguity.
+      working-directory: ./src
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip wheel setuptools
+        pip install -r requirements.txt
+        pip install -I cachetools==5.4.0 chardet==5.2.0 colorama==0.4.6 distlib==0.3.8 filelock==3.15.4 packaging==24.1 platformdirs==4.2.2 pluggy==1.5.0 setuptools==68.1.2 tox==4.17.1 virtualenv==20.26.3
+# Recommendation: Add 'working-directory' to avoid ambiguity.
+      working-directory: ./src
+    - name: Execute Test Scripts
+      run: |-
+        python3 setup.py check
+        tox
+# Recommendation: Add 'working-directory' to avoid ambiguity.
+      working-directory: ./src
+# Recommendation: Add concurrency control to avoid job overlaps.
+    concurrency: build-group
+# Recommendation: Add 'environment' variables to control environments and security.
+    environment:
+      ENVIRONMENT: production
+      DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}

@@ -1,0 +1,97 @@
+name: Workflow
+on: push
+jobs:
+  evaluation/ultralytics-yolov5/targets/benchmarks.sh:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - '3.12'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install -r requirements.txt
+          pip install -I anyio==4.4.0 astor==0.8.1 astunparse==1.6.3 certifi==2024.7.4 coloredlogs==15.0.1 cycler==0.12.1 defusedxml==0.7.1 flatbuffers==24.3.25 fsspec==2024.6.1 gast==0.6.0 gitdb==4.0.11 h11==0.14.0 h5py==3.11.0 httpcore==1.0.5 httpx==0.27.0 humanfriendly==10.0 idna==3.7 keras==3.4.1 kiwisolver==1.4.5 mpmath==1.3.0 namex==0.0.8 networkx==3.1 onnx==1.16.2 onnxruntime==1.18.1 openvino==2024.3.0 optree==0.12.1 packaging==24.1 psutil==6.0.0 pyparsing==3.1.1 pytz==2024.1 rich==13.7.1 smmap==5.0.1 sniffio==1.3.1 sympy==1.13.1 tensorboard==2.17.0 termcolor==2.4.0 urllib3==2.2.2 wrapt==1.16.0 x2paddle==1.5.0
+      - name: Execute Test Scripts
+        run: |
+          python3 benchmarks.py --data coco128.yaml --weights yolov5n.pt --img 320 --hard-fail 0.29
+
+          python3 benchmarks.py --data coco128-seg.yaml --weights yolov5n-seg.pt --img 320 --hard-fail 0.22
+
+          python3 export.py --weights yolov5n-cls.pt --include onnx --img 224
+          python3 detect.py --weights yolov5n.onnx --img 320
+          python3 segment/predict.py --weights yolov5n-seg.onnx --img 320
+          python3 classify/predict.py --weights yolov5n-cls.onnx --img 224
+  evaluation/ultralytics-yolov5/targets/tests.sh:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - '3.12'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install -r requirements.txt
+          pip install -I astunparse==1.6.3 certifi==2024.7.4 cycler==0.12.1 defusedxml==0.7.1 flatbuffers==24.3.25 fsspec==2024.6.1 gast==0.6.0 gitdb==4.0.11 h5py==3.11.0 idna==3.7 keras==3.4.1 kiwisolver==1.4.5 mpmath==1.3.0 namex==0.0.8 onnx==1.16.2 onnxruntime==1.18.1 optree==0.12.1 packaging==24.1 psutil==6.0.0 pyparsing==3.1.1 pytz==2024.1 rich==13.7.1 smmap==5.0.1 sympy==1.13.1 tensorboard==2.17.0 termcolor==2.4.0 urllib3==2.2.2 wrapt==1.16.0
+      - name: Execute Test Scripts
+        run: |
+          # export PYTHONPATH="$PWD"  # to run '$ python *.py' files in subdirectories
+          m=yolov5n  # official weights
+          b=runs/train/exp/weights/best  # best.pt checkpoint
+          python3 train.py --imgsz 64 --batch 32 --weights $m.pt --cfg $m.yaml --epochs 1 --device cpu  # train
+          for d in cpu; do  # devices
+          for w in $m $b; do  # weights
+          python3 val.py --imgsz 64 --batch 32 --weights $w.pt --device $d  # val
+          python3 detect.py --imgsz 64 --weights $w.pt --device $d  # detect
+          done
+          done
+          python3 hubconf.py --model $m  # hub
+          # python3 models/tf.py --weights $m.pt  # build TF model
+          python3 models/yolo.py --cfg $m.yaml  # build PyTorch model
+          python3 export.py --weights $m.pt --img 64 --include torchscript  # export
+          python3 - <<EOF
+          import torch
+          im = torch.zeros([1, 3, 64, 64])
+          for path in '$m', '$b':
+          model = torch.hub.load('.', 'custom', path=path, source='local')
+          print(model('data/images/bus.jpg'))
+          model(im)  # warmup, build grids for trace
+          torch.jit.trace(model, [im])
+          EOF
+
+          m=yolov5n-seg  # official weights
+          b=runs/train-seg/exp/weights/best  # best.pt checkpoint
+          python3 segment/train.py --imgsz 64 --batch 32 --weights $m.pt --cfg $m.yaml --epochs 1 --device cpu  # train
+          python3 segment/train.py --imgsz 64 --batch 32 --weights '' --cfg $m.yaml --epochs 1 --device cpu  # train
+          for d in cpu; do  # devices
+          for w in $m $b; do  # weights
+          python3 segment/val.py --imgsz 64 --batch 32 --weights $w.pt --device $d  # val
+          python3 segment/predict.py --imgsz 64 --weights $w.pt --device $d  # predict
+          python3 export.py --weights $w.pt --img 64 --include torchscript --device $d  # export
+          done
+          done
+
+          m=yolov5n-cls.pt  # official weights
+          b=runs/train-cls/exp/weights/best.pt  # best.pt checkpoint
+          python3 classify/train.py --imgsz 32 --model $m --data mnist160 --epochs 1  # train
+          python3 classify/val.py --imgsz 32 --weights $b --data ../datasets/mnist160  # val
+          python3 classify/predict.py --imgsz 32 --weights $b --source ../datasets/mnist160/test/7/60.png  # predict
+          python3 classify/predict.py --imgsz 32 --weights $m --source data/images/bus.jpg  # predict
+          python3 export.py --weights $b --img 64 --include torchscript  # export
+          python3 - <<EOF
+          import torch
+          for path in '$m', '$b':
+          model = torch.hub.load('.', 'custom', path=path, source='local')
+          EOF
