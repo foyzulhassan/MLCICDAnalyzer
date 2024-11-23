@@ -1,0 +1,7 @@
+ruamel.yaml
+codebleu
+graphtage
+
+PyQt6 # for matplotlib
+opencv-python-headless # for matplotlib
+matplotlib
