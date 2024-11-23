@@ -35,25 +35,25 @@ Issues = "https://github.com/foyzulhassan/MLCICDAnalyzer/issues"
 Source = "https://github.com/foyzulhassan/MLCICDAnalyzer"
 
 [tool.hatch.version]
-path = "src/ci_config_generator/__about__.py"
+path = "src/genci/__about__.py"
 
 [tool.hatch.envs.types]
 extra-dependencies = [
   "mypy>=1.0.0",
 ]
 [tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/ci_config_generator tests}"
+check = "mypy --install-types --non-interactive {args:src/genci tests}"
 
 [tool.coverage.run]
-source_pkgs = ["ci_config_generator", "tests"]
+source_pkgs = ["genci", "tests"]
 branch = true
 parallel = true
 omit = [
-  "src/ci_config_generator/__about__.py",
+  "src/genci/__about__.py",
 ]
 
 [tool.coverage.paths]
-ci_config_generator = ["src/ci_config_generator", "*/MLCICDAnalyzer/src/ci_config_generator"]
+genci = ["src/genci", "*/MLCICDAnalyzer/src/genci"]
 tests = ["tests", "*/MLCICDAnalyzer/tests"]
 
 [tool.coverage.report]

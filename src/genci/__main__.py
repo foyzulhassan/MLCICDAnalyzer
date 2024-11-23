@@ -3,6 +3,7 @@ from tracing import Tracing
 from yamlci import YamlCI
 import os
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--target', dest='target', type=str, help='path to target bash script, or directory of scripts, to be traced', default='target.sh')

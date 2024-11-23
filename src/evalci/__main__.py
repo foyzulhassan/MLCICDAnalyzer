@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from collections import OrderedDict
 
+
 def calc_shared_lines(reference: str, hypothesis: str) -> float:
     """Caclulate the proportion of shared lines between strings (ignoring leading/trailing whitespace and order)"""
     reference_lines = [line.strip() for line in reference.splitlines()]
@@ -17,6 +18,7 @@ def calc_shared_lines(reference: str, hypothesis: str) -> float:
     accuracy = exact_matches / len(reference_lines)
     return accuracy
 
+
 def calc_num_of_edits(reference_path: str, hypothesis_path: str) -> int:
     """Number of differences resulting from a semantic diff between the reference and hypothesis"""
     reference_tree = graphtage.yaml.build_tree(reference_path)
@@ -24,10 +26,12 @@ def calc_num_of_edits(reference_path: str, hypothesis_path: str) -> int:
     edits = list(reference_tree.get_all_edits(hypothesis_tree))
     return len(edits)
 
+
 def calc_code_bleu(reference: str, hypothesis: str, lang: str) -> dict[str, float]:
     """Calculate the BLEU score for a hypothesis string given a reference string"""
     code_bleu = codebleu.calc_codebleu([reference], [hypothesis], lang=lang, weights=(0.25, 0.25, 0.25, 0.25), tokenizer=None)
     return code_bleu
+
 
 def complete_evaluation(reference_path: str, hypothesis_path: str):
     """Conduct all available evaluations on the given hypothesis"""
@@ -46,6 +50,7 @@ def complete_evaluation(reference_path: str, hypothesis_path: str):
     result = {**code_bleu, **{'shared_lines': shared_lines, 'num_of_edits': num_of_edits}}
     return result
 
+
 def yaml_to_javascript(path: str) -> str:
     """Convert YAML to javascript object and return dumped filename"""
     with open(path, 'r') as file:
@@ -54,9 +59,11 @@ def yaml_to_javascript(path: str) -> str:
     javascript = 'const object = ' + jsons.replace('\n', '; ')
     return javascript
 
+
 def load_batch(path: str):
     """Load all YAMLs that are within file structures with the following format: path/repo_name/version.yaml"""
     return {os.path.basename(dirpath): list(map(lambda filename: f'{dirpath}/{filename}', filenames)) for dirpath, _, filenames in os.walk(path) if filenames}
+
 
 def evaluate_batch(batch: dict[str, list[str]], reference_name: str):
     """Conduct complete evaluation on YAMLs within batch on their respective references"""
@@ -72,6 +79,7 @@ def evaluate_batch(batch: dict[str, list[str]], reference_name: str):
             result[group][basename] = complete_evaluation(reference_path, hypothesis_path)
     return result
 
+
 def organize_batch_result(batch_result: dict, dump: bool = False):
     """Parse batch result to produce something that is easier to plot"""
     metrics = list(list(list(batch_result.values())[0].values())[0].keys())
@@ -86,6 +94,7 @@ def organize_batch_result(batch_result: dict, dump: bool = False):
         with open(f"{datetime.now().strftime('%m-%d-%y_%H-%M-%S')}-result.json", 'w') as file:
             json.dump(organized_result, file)
     return organized_result
+
 
 def plot_batch_result(organized_result: dict, rows: int = 2, cols: int = 4, order: list = None):
     """Plot organized batch results"""
@@ -109,6 +118,7 @@ def plot_batch_result(organized_result: dict, rows: int = 2, cols: int = 4, orde
     manager.window.showMaximized()
     plt.show()
 
+
 def parse_args():
     """Parse CLI arguments and return them"""
     parser = argparse.ArgumentParser()
@@ -118,6 +128,7 @@ def parse_args():
     parser.add_argument('--plot', dest='plot_path', type=str, help='Plot an existing evaluation log')
     parser.add_argument('--order', dest='plot_order', nargs="+", help='Order to plot the YAMLs in a batch directory')
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
@@ -135,6 +146,7 @@ def main():
     elif args.single_paths:
         reference_path, hypothesis_path = args.single_paths[0], args.single_paths[1]
         print(complete_evaluation(reference_path, hypothesis_path))
+
 
 if __name__ == '__main__':
     main()

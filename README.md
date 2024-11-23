@@ -31,14 +31,10 @@ cd $home
 ```
 
 ### How to Run
-1. Launch a Linux-based environment
-2. Install Python3 (with tkinter) within the environment 
-3. Install target dependencies within the environment
-4. **Create the appropriate wrapper for the target within the environment**
-5. Clone this project and navigate to its root directory
-6. Run the following command with your arguments to generate **one new basic configuration:**
+1. Create the appropriate wrapper for the target scripts
+2. Run the following command with your arguments to generate **one new basic configuration:**
     ```console
-    python3 main.py --target \<PATH\> --requirement \<PATH\> --workflow \<PATH\> --workflow_name \<NAME\> --new_trace
+    python3 src/genci --target \<PATH\> --requirement \<PATH\> --workflow \<PATH\> --workflow_name \<NAME\> --new_trace
     ```
 
 ## License
