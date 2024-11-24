@@ -1,0 +1,19 @@
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0px;
+    border: 0px;
+    padding: 0px;
+}
+
+#nav-recommendations button {
+    font-size: 30px;
+    padding: 0px;
+    display: inline;
+}
+
+#nav-recommendations button:hover {
+    font-weight: bold;
+}

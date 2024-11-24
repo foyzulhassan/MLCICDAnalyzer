@@ -1,0 +1,19 @@
+{
+  "name": "guici",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "",
+  "description": "",
+  "devDependencies": {
+    "bootstrap": "^5.3.3",
+    "electron": "^33.2.0",
+    "monaco-editor": "^0.47.0",
+    "requirejs": "^2.3.7",
+    "typescript": "^5.7.2"
+  }
+}
