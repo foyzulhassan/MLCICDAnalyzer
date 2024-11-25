@@ -13,3 +13,13 @@ require(['vs/editor/editor.main'], function () {
     const diffEditor = monaco.editor.createDiffEditor(yamlEditor, { automaticLayout: true })
     diffEditor.setModel({original: orgModel, modified: modModel})
 });
+
+
+// const mainModal = document.getElementById('main-modal')
+// document.getElementById('nav-item-new').onclick((e) => {
+//     mainModal.showPopover()
+// });
+
+// myModal.addEventListener('shown.bs.modal', () => {
+//   myInput.focus()
+// })
