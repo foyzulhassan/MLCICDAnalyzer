@@ -17,8 +17,28 @@
         <button type="button" class="col-1 btn btn-light rounded-0 border-0" data-bs-toggle="modal" data-bs-target="#loadStaticBackdrop">Load</button>
       </div>
 
+      <!-- Recommendation Carousel -->
+      <div class="row align-items-center">
+        <div id="carousel-recommendations" class="carousel slide mt-3" data-interval="false">
+          <div class="carousel-inner w-75" style="text-align: center; margin: auto;">
+            <div class="carousel-item active">
+              <div class="container">
+                <div class="row">
+                  <div class="col-10"><div class="d-flex h-100 align-items-center justify-content-center">1</div></div>
+                  <button class="col-2 btn btn-outline-dark">Apply</button>
+                </div>
+              </div>
+            </div>
+            <div class="carousel-item"><div class="d-flex h-100 align-items-center justify-content-center">2</div></div>
+            <div class="carousel-item"><div class="d-flex h-100 align-items-center justify-content-center">3</div></div>
+          </div>
+          <button class="carousel-control-prev btn text-dark" type="button" data-bs-target="#carousel-recommendations" data-bs-slide="prev" style="font-size: xx-large;">&lt;&lt;&lt;</button>
+          <button class="carousel-control-next btn text-dark" type="button" data-bs-target="#carousel-recommendations" data-bs-slide="next" style="font-size: xx-large;">&gt;&gt;&gt;</button>
+        </div>
+      </div>
+
       <!-- YAML Diff Editor -->
-      <div class="row align-items-start" style="height: 90%;">
+      <div class="row align-items-start" style="height: 80%;">
         <div id="yaml-editor" class="col pt-3 h-100"></div>
       </div>
     </div>
@@ -66,7 +86,7 @@
 
             <!-- workflow_name -->
             <div class="input-group mt-3">
-              <label class="input-group-text bg-white text-danger" for="input-group-target-file">*</label>
+              <label class="input-group-text bg-white text-danger">*</label>
               <span class="input-group-text" id="basic-addon1">--workflow_name</span>
               <input type="text" class="form-control" placeholder="" aria-label="Workflow" aria-describedby="basic-addon1">
               <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-workflowname-description" aria-expanded="false" aria-controls="input-group-workflowname-description">v</button>
@@ -157,6 +177,7 @@
       </div>
     </div>
 
+    <!-- Load Config Modal -->
     <div class="modal fade" id="loadStaticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="loadStaticBackdropLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-scrollable modal-xl">
         <div class="modal-content">
