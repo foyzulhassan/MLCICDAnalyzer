@@ -13,8 +13,8 @@
       <!-- Navigation Bar -->
       <div class="row align-items-center bg-body-tertiary">
         <button type="button" class="col-2 btn border-0 rounded-0 disabled" style="font-size: large;">CI Configuration Generator</button>
-        <button type="button" class="col-1 btn btn-light rounded-0 border-0" data-bs-toggle="modal" data-bs-target="#staticBackdrop">New</button>
-        <button type="button" class="col-1 btn btn-light rounded-0 border-0">Load</button>
+        <button type="button" class="col-1 btn btn-light rounded-0 border-0" data-bs-toggle="modal" data-bs-target="#newStaticBackdrop">New</button>
+        <button type="button" class="col-1 btn btn-light rounded-0 border-0" data-bs-toggle="modal" data-bs-target="#loadStaticBackdrop">Load</button>
       </div>
 
       <!-- YAML Diff Editor -->
@@ -24,11 +24,11 @@
     </div>
 
     <!-- New Config Modal -->
-    <div class="modal fade" id="staticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal fade" id="newStaticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="newStaticBackdropLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-scrollable modal-xl">
         <div class="modal-content">
           <div class="modal-header">
-            <h1 class="modal-title fs-5" id="staticBackdropLabel">Generate a New CI Configuration</h1>
+            <h1 class="modal-title fs-5" id="newStaticBackdropLabel">Generate a New CI Configuration</h1>
           </div>
           <div class="modal-body">
             <!-- target -->
@@ -42,6 +42,26 @@
               <div class="card card-body">
                 Path to the (1) target bash script or (2) directory of target bash scripts to be traced.
               </div>
+            </div>
+
+            <!-- whether to pre-augment with llm -->
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="input-group-newllmaugment-switch" data-bs-toggle="collapse" data-bs-target="#input-group-newapikey-text" aria-controls="input-group-newapikey-text">
+              <label class="form-check-label" for="input-group-newllmaugment-switch">* Pre-Augment with LLM</label>
+            </div>
+            <div class="collapse" id="input-group-newapikey-text">
+                <!-- LLM API Key -->
+                <div class="input-group mt-3">
+                  <label class="input-group-text bg-white text-danger" for="input-group-newapikey-text">*</label>
+                  <span class="input-group-text" id="basic-addon1">LLM API Key</span>
+                  <input type="password" class="form-control" placeholder="" aria-label="Workflow" aria-describedby="basic-addon1">
+                  <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-newapikey-description" aria-expanded="false" aria-controls="input-group-newapikey-description">v</button>
+                </div>
+                <div class="collapse" id="input-group-newapikey-description">
+                  <div class="card card-body">
+                    LLM API Key
+                  </div>
+                </div>
             </div>
 
             <!-- workflow_name -->
@@ -127,6 +147,54 @@
               <div class="card card-body">
                 Path to a log listing the docker containers on the machine.
               </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary">Generate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="loadStaticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="loadStaticBackdropLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="loadStaticBackdropLabel">Load Existing CI Configuration</h1>
+          </div>
+          <div class="modal-body">
+            <!-- load_yaml -->
+            <div class="input-group">
+              <label class="input-group-text bg-white text-danger" for="input-group-loadyaml-file">*</label>
+              <label class="input-group-text" for="input-group-loadyaml-file">YAML</label>
+              <input type="file" class="form-control" id="input-group-loadyaml-file">
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-loadyaml-description" aria-expanded="false" aria-controls="input-group-loadyaml-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-loadyaml-description">
+              <div class="card card-body">
+                YAML file to be augmented.
+              </div>
+            </div>
+            
+            <!-- whether to pre-augment with llm -->
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="input-group-llmaugment-switch" data-bs-toggle="collapse" data-bs-target="#input-group-loadapikey-text" aria-controls="input-group-loadapikey-text">
+              <label class="form-check-label" for="input-group-loadllmaugment-switch">* Pre-Augment with LLM</label>
+            </div>
+            <div class="collapse" id="input-group-loadapikey-text">
+                <!-- LLM API Key -->
+                <div class="input-group mt-3">
+                  <label class="input-group-text bg-white text-danger" for="input-group-loadapikey-text">*</label>
+                  <span class="input-group-text" id="basic-addon1">LLM API Key</span>
+                  <input type="password" class="form-control" placeholder="" aria-label="Workflow" aria-describedby="basic-addon1">
+                  <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-loadapikey-description" aria-expanded="false" aria-controls="input-group-loadapikey-description">v</button>
+                </div>
+                <div class="collapse" id="input-group-loadapikey-description">
+                  <div class="card card-body">
+                    LLM API Key
+                  </div>
+                </div>
             </div>
           </div>
           <div class="modal-footer">
