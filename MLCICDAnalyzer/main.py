@@ -96,5 +96,5 @@ if __name__ == '__main__':
 #   --ci_instructions /home/rchavan/ci_tool/test-projects/yolov5-scripts/instructions.txt \
 #   --prompt_file /home/rchavan/ci_tool/test-projects/yolov5-scripts/prompt.txt \
 #   --workflow_name workflow \
-#   --api_key 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 \
+#   --api_key <apikey> \
 #   --new_trace
