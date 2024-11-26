@@ -55,7 +55,7 @@
 
             <!-- whether to pre-augment with llm -->
             <div class="form-check form-switch mt-3">
-              <input class="form-check-input" type="checkbox" role="switch" id="input-group-newllmaugment-switch" data-bs-toggle="collapse" data-bs-target="#input-group-newapikey-text" aria-controls="input-group-newapikey-text">
+              <input id="input-group-newllmaugment-switch" class="form-check-input" type="checkbox" role="switch" data-bs-toggle="collapse" data-bs-target="#input-group-newapikey-text" aria-controls="input-group-newapikey-text">
               <label class="form-check-label" for="input-group-newllmaugment-switch">* Pre-Augment with LLM</label>
             </div>
             <div class="collapse" id="input-group-newapikey-text">
@@ -63,7 +63,7 @@
                 <div class="input-group mt-3">
                   <label class="input-group-text bg-white text-danger" for="input-group-newapikey-text">*</label>
                   <span class="input-group-text" id="basic-addon1">LLM API Key</span>
-                  <input type="password" class="form-control" placeholder="" aria-label="Workflow" aria-describedby="basic-addon1">
+                  <input id="input-group-newllmaugment-text" type="password" class="form-control" placeholder="" aria-label="Workflow" aria-describedby="basic-addon1">
                   <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-newapikey-description" aria-expanded="false" aria-controls="input-group-newapikey-description">v</button>
                 </div>
                 <div class="collapse" id="input-group-newapikey-description">
@@ -77,7 +77,7 @@
             <div class="input-group mt-3">
               <label class="input-group-text bg-white text-danger">*</label>
               <span class="input-group-text" id="basic-addon1">--workflow_name</span>
-              <input type="text" class="form-control" placeholder="" aria-label="Workflow" aria-describedby="basic-addon1">
+              <input id="input-group-workflowname-text" type="text" class="form-control" placeholder="" aria-label="Workflow" aria-describedby="basic-addon1">
               <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-workflowname-description" aria-expanded="false" aria-controls="input-group-workflowname-description">v</button>
             </div>
             <div class="collapse" id="input-group-workflowname-description">
@@ -89,7 +89,7 @@
             <!-- host_container -->
             <div class="input-group mt-3">
               <span class="input-group-text" id="basic-addon1">--host_container</span>
-              <input type="text" class="form-control" placeholder="" aria-label="Host Container" aria-describedby="basic-addon1">
+              <input id="input-group-hostcontainer-text" type="text" class="form-control" placeholder="" aria-label="Host Container" aria-describedby="basic-addon1">
               <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-hostcontainer-description" aria-expanded="false" aria-controls="input-group-hostcontainer-description">v</button>
             </div>
             <div class="collapse" id="input-group-hostcontainer-description">
@@ -159,8 +159,9 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary">Generate</button>
+            <span id="new-status-text" class="text-danger"></span>
+            <button id="new-close-btn" type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button id="new-yaml-btn" type="button" class="btn btn-primary">Generate</button>
           </div>
         </div>
       </div>
