@@ -16,10 +16,18 @@ const createWindow = () => {
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle('get_recommendations', get_recommendations)
+  ipcMain.handle('get_recommendations', async (event, ...args) => {
+    return await get_recommendations(args[0])
+  })
   createWindow()
 })
 
-function get_recommendations() {
-  return [{'description': 1, 'yaml': 'one'}, {'description': 2, 'yaml': 'two'}, {'description': 3, 'yaml': 'three'}] // replace with bash call
+async function get_recommendations(yaml) {
+  // TODO: replace with bash call
+  const recommendations = []
+  for(i = 1; i < 4; i++) {
+    let randomNumber = Math.floor(Math.random() * 100)
+    recommendations.push({'description': randomNumber, 'yaml': randomNumber})
+  }
+  return recommendations
 }
