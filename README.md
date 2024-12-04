@@ -39,3 +39,5 @@ cd $home
 
 ## License
 TBD
+
+python3 -m genci   --requirements /home/rchavan/ci_tool/test-projects/yolov5/requirements.txt   --workflow /home/rchavan/ci_tool/test-projects/yolov5-scripts/generations/workflow.yaml   --project_description /home/rchavan/ci_tool/test-projects/yolov5-scripts/project_description.txt   --ci_instructions /home/rchavan/ci_tool/test-projects/yolov5-scripts/instructions.txt   --prompt_file /home/rchavan/ci_tool/test-projects/yolov5-scripts/prompt.txt   --workflow_name workflow   --api_key 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   --target /home/rchavan/ci_tool/test-projects/yolov5-scripts/targets

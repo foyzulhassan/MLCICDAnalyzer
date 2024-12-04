@@ -1,4 +1,4 @@
-from tracing import Tracing
+from genci.tracing import Tracing
 import ruamel.yaml
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
