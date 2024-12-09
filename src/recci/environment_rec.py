@@ -130,118 +130,118 @@
 #       COMET_LOG_PREDICTIONS: <value>
 
 
-import os
-import re
+# import os
+# import re
 
-class EnvironmentRecommendation:
-    def __init__(self, workflow):
-        self.workflow = workflow
-        self.recommendations = []
-        self.env_var_sources = {}  # To store sources of environment variables
+# class EnvironmentRecommendation:
+#     def __init__(self, workflow):
+#         self.workflow = workflow
+#         self.recommendations = []
+#         self.env_var_sources = {}  # To store sources of environment variables
 
-    def clean_env_var_name(self, var):
-        """
-        Cleans up environment variable names by removing unwanted characters or default values.
-        """
-        # Remove any default values after a comma
-        var = var.split(",")[0]
-        # Strip surrounding quotes and spaces
-        return var.strip().replace('"', '').replace("'", '')
+#     def clean_env_var_name(self, var):
+#         """
+#         Cleans up environment variable names by removing unwanted characters or default values.
+#         """
+#         # Remove any default values after a comma
+#         var = var.split(",")[0]
+#         # Strip surrounding quotes and spaces
+#         return var.strip().replace('"', '').replace("'", '')
 
-    def extract_env_vars_from_code(self, code_dir):
-        """
-        Extract environment variable names from the codebase.
-        Tracks the file where each variable is found.
-        """
-        env_vars = {}
+#     def extract_env_vars_from_code(self, code_dir):
+#         """
+#         Extract environment variable names from the codebase.
+#         Tracks the file where each variable is found.
+#         """
+#         env_vars = {}
 
-        if code_dir:
-            try:
-                for root, _, files in os.walk(code_dir):
-                    for file in files:
-                        if file.endswith('.py'):
-                            file_path = os.path.join(root, file)
-                            with open(file_path, 'r', errors='ignore') as f:
-                                content = f.read()
-                                # Match os.getenv("VAR_NAME") or os.getenv('VAR_NAME', 'default_value')
-                                matches = re.findall(r"os\.getenv\(['\"](.*?)['\"](?:, ['\"].*?['\"])?\)", content)
-                                for match in matches:
-                                    clean_var = self.clean_env_var_name(match)
-                                    env_vars[clean_var] = f"Codebase: {file_path}"
-            except Exception as e:
-                print(f"Error scanning code directory: {e}")
+#         if code_dir:
+#             try:
+#                 for root, _, files in os.walk(code_dir):
+#                     for file in files:
+#                         if file.endswith('.py'):
+#                             file_path = os.path.join(root, file)
+#                             with open(file_path, 'r', errors='ignore') as f:
+#                                 content = f.read()
+#                                 # Match os.getenv("VAR_NAME") or os.getenv('VAR_NAME', 'default_value')
+#                                 matches = re.findall(r"os\.getenv\(['\"](.*?)['\"](?:, ['\"].*?['\"])?\)", content)
+#                                 for match in matches:
+#                                     clean_var = self.clean_env_var_name(match)
+#                                     env_vars[clean_var] = f"Codebase: {file_path}"
+#             except Exception as e:
+#                 print(f"Error scanning code directory: {e}")
         
-        return env_vars
+#         return env_vars
 
-    def extract_env_vars_from_strace(self, strace_file):
-        """
-        Extract environment variable names from the strace output.
-        Tracks that the variable came from strace.
-        """
-        env_vars = {}
+#     def extract_env_vars_from_strace(self, strace_file):
+#         """
+#         Extract environment variable names from the strace output.
+#         Tracks that the variable came from strace.
+#         """
+#         env_vars = {}
 
-        if strace_file and os.path.exists(strace_file):
-            try:
-                with open(strace_file, 'r') as file:
-                    content = file.read()
-                    # Match getenv("VAR_NAME") or getenv('VAR_NAME', 'default_value')
-                    matches = re.findall(r"getenv\(['\"](.*?)['\"](?:, ['\"].*?['\"])?\)", content)
-                    for match in matches:
-                        clean_var = self.clean_env_var_name(match)
-                        env_vars[clean_var] = "Strace log"
-            except Exception as e:
-                print(f"Error reading strace file: {e}")
+#         if strace_file and os.path.exists(strace_file):
+#             try:
+#                 with open(strace_file, 'r') as file:
+#                     content = file.read()
+#                     # Match getenv("VAR_NAME") or getenv('VAR_NAME', 'default_value')
+#                     matches = re.findall(r"getenv\(['\"](.*?)['\"](?:, ['\"].*?['\"])?\)", content)
+#                     for match in matches:
+#                         clean_var = self.clean_env_var_name(match)
+#                         env_vars[clean_var] = "Strace log"
+#             except Exception as e:
+#                 print(f"Error reading strace file: {e}")
         
-        return env_vars
+#         return env_vars
 
-    def generate_recommendation(self, strace_file=None, code_dir=None):
-        """
-        Generate environment variable-related recommendations.
-        """
-        if not self.workflow:
-            raise ValueError("Workflow not loaded.")
+#     def generate_recommendation(self, strace_file=None, code_dir=None):
+#         """
+#         Generate environment variable-related recommendations.
+#         """
+#         if not self.workflow:
+#             raise ValueError("Workflow not loaded.")
 
-        # Extract environment variables from both sources
-        env_vars_code = self.extract_env_vars_from_code(code_dir)
-        env_vars_strace = self.extract_env_vars_from_strace(strace_file)
+#         # Extract environment variables from both sources
+#         env_vars_code = self.extract_env_vars_from_code(code_dir)
+#         env_vars_strace = self.extract_env_vars_from_strace(strace_file)
 
-        # Combine all environment variables, preferring the source from the codebase
-        all_env_vars = {**env_vars_strace, **env_vars_code}
-        self.env_var_sources = all_env_vars
+#         # Combine all environment variables, preferring the source from the codebase
+#         all_env_vars = {**env_vars_strace, **env_vars_code}
+#         self.env_var_sources = all_env_vars
 
-        if all_env_vars:
-            for job_id, _ in self.workflow.get('jobs', {}).items():
-                recommendation = {
-                    "recommendation": (
-                        f"Define the following environment variables under 'jobs.{job_id}.environment' "
-                        "to ensure consistent access across steps."
-                    ),
-                    "yaml": f"jobs:\n  {job_id}:\n    environment:\n",
-                    "sources": {}
-                }
-                for var, source in sorted(all_env_vars.items()):
-                    recommendation["yaml"] += f"      {var}: <value>\n"
-                    recommendation["sources"][var] = source
-                self.recommendations.append(recommendation)
+#         if all_env_vars:
+#             for job_id, _ in self.workflow.get('jobs', {}).items():
+#                 recommendation = {
+#                     "recommendation": (
+#                         f"Define the following environment variables under 'jobs.{job_id}.environment' "
+#                         "to ensure consistent access across steps."
+#                     ),
+#                     "yaml": f"jobs:\n  {job_id}:\n    environment:\n",
+#                     "sources": {}
+#                 }
+#                 for var, source in sorted(all_env_vars.items()):
+#                     recommendation["yaml"] += f"      {var}: <value>\n"
+#                     recommendation["sources"][var] = source
+#                 self.recommendations.append(recommendation)
 
-    def output_recommendations(self):
-        """
-        Output the recommendations in human-readable format.
-        """
-        if not self.recommendations:
-            print("```yaml\n# No recommendations to provide. Your YAML looks good!\n```")
-            return
+#     def output_recommendations(self):
+#         """
+#         Output the recommendations in human-readable format.
+#         """
+#         if not self.recommendations:
+#             print("```yaml\n# No recommendations to provide. Your YAML looks good!\n```")
+#             return
 
-        for rec in self.recommendations:
-            print("\nRecommendation:")
-            print(rec["recommendation"])
-            print("\nSuggested YAML Code Block:")
-            print("```yaml")
-            print(rec["yaml"])
-            print("```")
-            print("\nVariable Sources:")
-            for var, source in rec["sources"].items():
-                print(f"  {var}: {source}")
+#         for rec in self.recommendations:
+#             print("\nRecommendation:")
+#             print(rec["recommendation"])
+#             print("\nSuggested YAML Code Block:")
+#             print("```yaml")
+#             print(rec["yaml"])
+#             print("```")
+#             print("\nVariable Sources:")
+#             for var, source in rec["sources"].items():
+#                 print(f"  {var}: {source}")
 
 
 # Recommendation:
@@ -287,3 +287,107 @@ class EnvironmentRecommendation:
 #       COMET_MODE", "online: <value>
 
 # ```
+
+
+import os
+import re
+
+class EnvironmentRecommendation:
+    def __init__(self):
+        self.recommendations = []
+
+    def extract_env_vars_from_code(self, code_dir):
+        """
+        Extract environment variables accessed in the codebase using os.getenv().
+        """
+        env_vars = {}
+
+        if code_dir:
+            try:
+                for root, _, files in os.walk(code_dir):
+                    for file in files:
+                        if file.endswith('.py'):
+                            file_path = os.path.join(root, file)
+                            with open(file_path, 'r', errors='ignore') as f:
+                                content = f.read()
+                                # Match os.getenv('VAR_NAME') or os.getenv("VAR_NAME")
+                                matches = re.findall(r"os\.getenv\(['\"](.*?)['\"]\)", content)
+                                for match in matches:
+                                    env_vars[match] = f"Codebase: {file_path}"
+            except Exception as e:
+                print(f"Error scanning code directory for environment variables: {e}")
+
+        return env_vars
+
+    def extract_env_vars_from_strace(self, strace_file):
+        """
+        Extract environment variables accessed via strace logs (e.g., getenv system calls).
+        """
+        env_vars = {}
+
+        if strace_file and os.path.exists(strace_file):
+            try:
+                with open(strace_file, 'r') as file:
+                    content = file.read()
+                    # Match getenv("VAR_NAME")
+                    matches = re.findall(r'getenv\("([^"]+)"\)', content)
+                    for match in matches:
+                        env_vars[match] = "Strace log"
+            except Exception as e:
+                print(f"Error reading strace file for environment variables: {e}")
+
+        return env_vars
+
+    def generate_recommendation(self, job_id, job, strace_file=None, code_dir=None):
+        """
+        Generate recommendations for a specific job.
+        """
+        env_vars_code = self.extract_env_vars_from_code(code_dir)
+        env_vars_strace = self.extract_env_vars_from_strace(strace_file)
+
+        all_env_vars = {**env_vars_strace, **env_vars_code}
+        relevant_vars = []
+
+        # Check if the job's steps use the variables
+        for step in job.get('steps', []):
+            if 'run' in step:
+                step_command = step['run']
+                for var in all_env_vars:
+                    if var in step_command:
+                        relevant_vars.append((var, all_env_vars[var]))
+
+        # If relevant variables exist, create a recommendation
+        if relevant_vars:
+            recommendation = {
+                "job_id": job_id,
+                "original_block": job,
+                "recommended_block": {
+                    "environment": {var: "<value>" for var, _ in relevant_vars}
+                },
+                "sources": {var: source for var, source in relevant_vars},
+            }
+            self.recommendations.append(recommendation)
+
+    def output_recommendations(self):
+        """
+        Output recommendations for all jobs.
+        """
+        if not self.recommendations:
+            print("No environment recommendations available.")
+            return
+
+        for rec in self.recommendations:
+            print("\n--- Environment Recommendation ---")
+            print(f"Job ID: {rec['job_id']}")
+            print("\nOriginal Block:")
+            print("```yaml")
+            print(yaml.dump(rec["original_block"], default_flow_style=False))
+            print("```")
+            print("\nRecommended Block:")
+            print("```yaml")
+            print(yaml.dump(rec["recommended_block"], default_flow_style=False))
+            print("```")
+            print("\nSources Used:")
+            for var, source in rec["sources"].items():
+                print(f"  {var}: {source}")
+
