@@ -1,182 +1,129 @@
+import json
 import copy
 import os
 from pathlib import Path
 import re
-import subprocess
 
 from itertools import combinations
 import numpy as np
 from pymoo.decomposition.asf import ASF
+import ruamel.yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import LiteralScalarString
+import textwrap
 
 
-class Recommendations:
-    def __init__(self, log_dir: str, patch_path: str, root_dir: str, env_filter_path: str = None):
-        self.log_dir = log_dir
-        self.patch_path = patch_path
-        self.root_dir = root_dir
-        self.env_filter = self.get_env_filter(env_filter_path) if env_filter_path is not None else []
+class HeuristicRecommendations:
+    def __init__(self,
+                 workflow_path: str,
+                 output_dir: str, 
+                 repository_dir: str, 
+                 env_filter_path: str = None):
+        self.workflow_path = workflow_path
+        self.workflow_name = Path(self.workflow_path).stem
+        self.yaml_parser = self.__yaml_parser()
+        with open(self.workflow_path, 'r') as workflow_file:
+            self.workflow = self.yaml_parser.load(workflow_file)
 
-    def strace(self, target_path: str):
-        """Execute and trace a target script with strace"""
-        output_path = os.path.join(self.log_dir, f'{Path(target_path).stem}.strace')
-        command = f'strace --follow-forks --decode-fds=path --trace=%file,%network --quiet=all --successful-only --absolute-timestamps=format:unix,precision:us --output={output_path} bash {target_path}'
-        subprocess.run(command, shell=True)
+        self.repository_dir = repository_dir
+        self.repository_paths = self.__repository_paths()
 
-    def ltrace(self, target_path: str, pyenv: bool = False):
-        """Execute and trace a target script with ltrace (and pyenv if desired)"""
-        commands = []
-        if pyenv:
-            pyenv_output_path = os.path.join(self.log_dir, f'{Path(target_path).stem}.pyenv')
-            commands.append(f'export ENV_TRACE={pyenv_output_path}')
-            commands.append(f'export PYTHONPATH={self.patch_path}')
-        ltrace_output_path = os.path.join(self.log_dir, f'{Path(target_path).stem}.ltrace')
-        commands.append(f'ltrace -fbTC -e *env -o {ltrace_output_path} bash {target_path}')
-        commands_str = '; '.join(commands)
-        subprocess.run(commands_str, shell=True)
+        self.env_filter_path = env_filter_path
+        self.env_filter = self.__env_filter() if self.env_filter_path is not None else []
+        self.output_dir = output_dir
 
-    def timestamp_lines(self, target_path: str, strace: bool = False) -> list[str]:
-        """Timestamp each line of a target script and execute it"""
-        timestamp_path = os.path.join(self.log_dir, f'{Path(target_path).stem}.timestamps')
-        if os.path.isfile(timestamp_path):
-            os.remove(timestamp_path)
-        lines = ['STARTING_EPOCH_TIME=$(date +%s)\n', 'PREVIOUS_TIME=0\n']
-        depth = 0
-        block = ''
-        starting_line_number = 0
-        line_number = 0
-        with open(target_path, 'r') as target:
-            for line in target:
-                # Record the current line that is read
-                lines.append(line)
-                line_number += 1
+    def apply_all(self, dump: bool = False) -> dict:
+        """Apply all recommendations to a workflow"""
+        recommendations_path = os.path.join(self.output_dir, f'{self.workflow_name}.recommendations')
+        with open(recommendations_path, 'r') as recommendations_file:
+            recommendations = json.load(recommendations_file)
 
-                # Check if line is empty or a comment and do not timestamp it if it is
-                if line.strip().startswith('#') or line.strip() == '':
+        recommended_workflow = copy.deepcopy(self.workflow)
+        for job_id in recommended_workflow['jobs']:
+            for key, value in recommendations['jobs'][job_id].items():
+                new_value = value
+                if not value:
                     continue
-                
-                # Check if line is the start of a block and do not timestamp it if it is
-                if line.strip().startswith(('if', 'for', 'while', 'case', ': \'')) or line.strip().endswith('{'):
-                    if depth == 0:
-                        starting_line_number = line_number
-                    depth += 1
-                    block += line
-                    continue
-
-                # Check if line is the end of a block and timestamp it if it is
-                if line.strip().startswith(('fi', 'done', '}', 'esac', '\'')) or line.strip().endswith(('; fi', '; done', '; }', '; esac')):
-                    depth -= 1
-                    if depth < 0:
-                        raise Exception('depth < 0')
-                    if not line.strip().startswith('\''):
-                        lines.append(f'printf "%d,%d,%d\\n" {starting_line_number} {line_number} $(($(date +%s) - $STARTING_EPOCH_TIME - $PREVIOUS_TIME)) >> {timestamp_path}\n')
-                        lines.append('PREVIOUS_TIME=$(($(date +%s) - $STARTING_EPOCH_TIME))\n')
-                    block = ''
-                    continue
-
-                # Timeline line that is not the start nor end of a block or a comment
-                if depth == 0:
-                    starting_line_number = line_number
-                    lines.append(f'printf "%d,%d,%d\\n" {starting_line_number} {line_number} $(($(date +%s) - $STARTING_EPOCH_TIME - $PREVIOUS_TIME)) >> {timestamp_path}\n')
-                    lines.append('PREVIOUS_TIME=$(($(date +%s) - $STARTING_EPOCH_TIME))\n')
+                elif key == 'steps':
+                    recommended_workflow['jobs'][job_id]['steps'] = value
+                    for i in range(len(recommended_workflow['jobs'][job_id]['steps'])):
+                        if 'run' in recommended_workflow['jobs'][job_id]['steps'][i]:
+                            recommended_workflow['jobs'][job_id]['steps'][i]['run'] = \
+                                self.__multiline(recommended_workflow['jobs'][job_id]['steps'][i]['run'].strip().replace('\\n', '\n').split('\n'))
+                elif key not in recommended_workflow['jobs'][job_id] or 'update' not in recommended_workflow['jobs'][job_id][key]:
+                    recommended_workflow['jobs'][job_id][key] = new_value
                 else:
-                    block += line
+                    recommended_workflow['jobs'][job_id][key].update(new_value)
         
-        timestamp_script_path = os.path.join(self.log_dir, f'{Path(target_path).stem}.timestamp-script')
-        with open(timestamp_script_path, 'w') as script:
-            script.writelines(lines)
-        if strace:
-            self.strace(timestamp_script_path)
-        else:
-            subprocess.run(f'bash {timestamp_script_path}', shell=True)
-        os.remove(timestamp_script_path)
-    
-    def get_repository_paths(self, root_dir: str) -> list[str]:
-        """Get the absolute paths of all files and directories in a repository"""
-        paths = {root_dir}
-        for dirpath, dirnames, filenames in os.walk(root_dir):
-            paths.update([os.path.join(dirpath, name) for name in dirnames + filenames])
-        return sorted(list(paths))
-    
-    def get_env_filter(self, env_filter_path: str) -> list[str]:
-        filter = []
-        with open(env_filter_path, 'r') as log:
-            for entry in log:
-                if entry.strip().startswith('#'):
-                    continue
-                filter.append(entry.strip())
-        return filter
+        if dump:
+            recommended_workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.yaml')
+            with open(recommended_workflow_path, 'w') as recommended_workflow_file:
+                self.yaml_parser.dump(recommended_workflow, recommended_workflow_file)
+        return recommended_workflow
 
-    def uneven_chunks(self, group, min_chunk_size=1):
-        """Find all ways to split a group into uneven chunks."""
-        if len(group) < 2:
-            yield [group]
-            return
-
-        for i in range(min_chunk_size, len(group)):
-            for combo in combinations(range(1, len(group)), i):
-                split_points = [0] + list(combo) + [len(group)]
-                yield [group[split_points[j]:split_points[j+1]] for j in range(len(split_points)-1)]
-
-
-class HeuristicRecommendations(Recommendations):
-    def get_recommendations(self, workflow: dict) -> dict:
+    def recommendations(self, dump: bool = False) -> dict:
         """Get all recommendations for a workflow"""
-        recommendations = {'jobs': {job_id: {} for job_id in workflow['jobs']}}
+        recommendations = {'jobs': {job_id: {} for job_id in self.workflow['jobs']}}
 
-        concurrency = self.concurrency(workflow)
+        concurrency = self.__concurrency()
         for job_id in concurrency:
             if concurrency[job_id] is None:
                 continue
             recommendations['jobs'][job_id]['concurrency'] = concurrency[job_id]
 
-        env = self.env(workflow)
+        env = self.__env()
         for job_id in env:
             if env[job_id] is None:
                 continue
             recommendations['jobs'][job_id]['env'] = env[job_id]
 
-        needs, needs_env = self.needs(workflow)
+        needs, needs_env = self.__needs()
         for job_id in needs:
             if needs[job_id] is not None:
                 recommendations['jobs'][job_id]['needs'] = needs[job_id]
             if needs_env[job_id] is not None:
                 recommendations['jobs'][job_id]['env'] = needs_env[job_id]
 
-        outputs = self.outputs(workflow)
+        outputs = self.__outputs()
         for job_id in outputs:
             if outputs[job_id] is None:
                 continue
             recommendations['jobs'][job_id]['outputs'] = outputs[job_id]
 
-        steps = self.steps(workflow)
+        steps = self.__steps()
         for job_id in steps:
             if steps[job_id] is None:
                 continue
-            recommendations['jobs'][job_id]['steps'] = copy.deepcopy(workflow['jobs'][job_id]['steps'])
+            recommendations['jobs'][job_id]['steps'] = copy.deepcopy(self.workflow['jobs'][job_id]['steps'])
             recommendations['jobs'][job_id]['steps'].pop() # Remove large step which is the last in the implementation
             recommendations['jobs'][job_id]['steps'].extend(steps[job_id])
 
-        timeout_minutes = self.timeout_minutes(workflow)
+        timeout_minutes = self.__timeout_minutes()
         for job_id in timeout_minutes:
             if timeout_minutes[job_id] is None:
                 continue
             recommendations['jobs'][job_id]['timeout-minutes'] = timeout_minutes[job_id]
 
-        working_directory = self.working_directory(workflow)
+        working_directory = self.__working_directory()
         for job_id in working_directory:
             if working_directory[job_id] is None:
                 continue
             recommendations['jobs'][job_id]['defaults']['run']['working-directory'] = working_directory[job_id]
 
+        if dump:
+            recommendations_path = os.path.join(self.output_dir, f'{self.workflow_name}.recommendations')
+            with open(recommendations_path, 'w') as recommendations_file:
+                json.dump(recommendations, recommendations_file, indent=2)
         return recommendations
 
-    def concurrency(self, workflow: dict, threshold: int = 600):
+    def __concurrency(self, threshold: int = 600) -> dict:
+        """Get concurrency recommendations"""
         recommendations = {}
-        for job_id in workflow['jobs']:
+        for job_id in self.workflow['jobs']:
             recommendations[job_id] = None
 
             # Check whether a strace log exists for the job
-            log_path = os.path.join(self.log_dir, f'{job_id}.strace')
+            log_path = os.path.join(self.output_dir, f'{job_id}.strace')
             if not os.path.isfile(log_path):
                 continue
             
@@ -199,14 +146,15 @@ class HeuristicRecommendations(Recommendations):
                 }
         return recommendations
 
-    def env(self, workflow: dict) -> dict:
+    def __env(self) -> dict:
+        """Get environmental variables recommendations"""
         recommendations = {}
-        for job_id in workflow['jobs']:
+        for job_id in self.workflow['jobs']:
             recommendations[job_id] = None
             candidate_env = {}
 
             # Check whether a pyenv log exists for the job and identify env variables
-            pyenv_log_path = os.path.join(self.log_dir, f'{job_id}.pyenv')
+            pyenv_log_path = os.path.join(self.output_dir, f'{job_id}.pyenv')
             if os.path.isfile(pyenv_log_path):
                 with open(pyenv_log_path, 'r') as log:
                     for entry in log:
@@ -216,7 +164,7 @@ class HeuristicRecommendations(Recommendations):
                         candidate_env[key.strip()] = value.strip()
 
             # Check whether a ltrace log exists for the job and identify env variables
-            ltrace_log_path = os.path.join(self.log_dir, f'{job_id}.ltrace')
+            ltrace_log_path = os.path.join(self.output_dir, f'{job_id}.ltrace')
             if os.path.isfile(ltrace_log_path):
                 with open(ltrace_log_path, 'r') as log:
                     for entry in log:
@@ -231,13 +179,14 @@ class HeuristicRecommendations(Recommendations):
                 recommendations[job_id] = {key: value for key, value in candidate_env.items() if key not in self.env_filter}
         return recommendations
 
-    def needs(self, workflow: dict) -> tuple[dict, dict]:
+    def __needs(self) -> tuple[dict, dict]:
+        """Get needs recommendations"""
         needs = {}
-        env = self.env(workflow)
-        outputs = self.outputs(workflow)
-        for current_id in workflow['jobs']:
+        env = self.__env()
+        outputs = self.__outputs()
+        for current_id in self.workflow['jobs']:
             needs[current_id] = None
-            for previous_id in workflow['jobs']:
+            for previous_id in self.workflow['jobs']:
                 # Check if there are more previous job ids
                 if current_id == previous_id:
                     break
@@ -254,14 +203,15 @@ class HeuristicRecommendations(Recommendations):
                     env[current_id][key] = f'${{needs.{previous_id}.outputs.{key}}}'
         return needs, env
 
-    def outputs(self, workflow: dict) -> dict:
+    def __outputs(self) -> dict:
+        """Get output recommendations"""
         recommendations = {}
-        for job_id in workflow['jobs']:
+        for job_id in self.workflow['jobs']:
             recommendations[job_id] = None
             candidate_outputs = {}
 
             # Check whether an ltrace log exists for the job and identify env variables
-            ltrace_log_path = os.path.join(self.log_dir, f'{job_id}.ltrace')
+            ltrace_log_path = os.path.join(self.output_dir, f'{job_id}.ltrace')
             if os.path.isfile(ltrace_log_path):
                 with open(ltrace_log_path, 'r') as log:
                     for entry in log:
@@ -277,19 +227,20 @@ class HeuristicRecommendations(Recommendations):
                 recommendations[job_id] = {key: value for key, value in candidate_outputs.items() if key not in self.env_filter}
         return recommendations
 
-    def steps(self, workflow: dict, weights: list[float, float] = [0.7, 0.3]) -> dict:
+    def __steps(self, weights: list[float, float] = [0.7, 0.3]) -> dict:
+        """Get steps recommendations"""
         recommendations = {}
-        for job_id in workflow['jobs']:
+        for job_id in self.workflow['jobs']:
             recommendations[job_id] = None
 
             # Check whether a timestamp log exists for the job
-            log_path = os.path.join(self.log_dir, f'{job_id}.timestamps')
-            if not os.path.isfile(log_path):
+            timestamp_path = os.path.join(self.output_dir, f'{job_id}.timestamps')
+            if not os.path.isfile(timestamp_path):
                 continue
             
             # Get the timestamps from the timestamp log
             timestamps = []
-            with open(log_path, 'r') as log:
+            with open(timestamp_path, 'r') as log:
                 for entry in log:
                     if entry.strip() == '':
                         continue
@@ -297,7 +248,7 @@ class HeuristicRecommendations(Recommendations):
                     timestamps.append(timestamp)
             
             # Seperate timestamps into all possible uneven groups
-            timestamp_groups = list(self.uneven_chunks(timestamps))
+            timestamp_groups = list(self.__uneven_chunks(timestamps))
 
             # Find the total start, end, and duration of each group
             total_timestamp_groups = []
@@ -331,20 +282,22 @@ class HeuristicRecommendations(Recommendations):
             decision = total_timestamp_groups[optimization_groups.index(decision)]
 
             # Recommend steps
-            run = workflow['jobs'][job_id]['steps'][-1]['run'].splitlines()
+            run = self.workflow['jobs'][job_id]['steps'][-1]['run'].splitlines()
             recommendations[job_id] = []
             for start, end, _ in decision:
-                step = '\n'.join(run[start-1:end])
+                step = self.__multiline(run[start-1:end])
+                #step = '\n'.join(run[start-1:end])
                 recommendations[job_id].append({'run': step})
         return recommendations
 
-    def timeout_minutes(self, workflow: dict, multiplier: int = 1.2) -> dict:
+    def __timeout_minutes(self, multiplier: int = 1.2) -> dict:
+        """Get timeout-minutes recommendations"""
         recommendations = {}
-        for job_id in workflow['jobs']:
+        for job_id in self.workflow['jobs']:
             recommendations[job_id] = None
 
             # Check whether a strace log exists for the job
-            log_path = os.path.join(self.log_dir, f'{job_id}.strace')
+            log_path = os.path.join(self.output_dir, f'{job_id}.strace')
             if not os.path.isfile(log_path):
                 continue
             
@@ -360,13 +313,14 @@ class HeuristicRecommendations(Recommendations):
             recommendations[job_id] = round(duration * multiplier)
         return recommendations
 
-    def working_directory(self, workflow: dict) -> dict:
+    def __working_directory(self) -> dict:
+        """Get working-directory recommendations"""
         recommendations = {}
-        repository_paths = self.get_repository_paths(self.root_dir)
-        for job_id in workflow['jobs']:
+        repository_paths = self.repository_paths
+        for job_id in self.workflow['jobs']:
             # Split steps in job into distinct tokens
             tokens = set()
-            for step in workflow['jobs'][job_id]['steps']:
+            for step in self.workflow['jobs'][job_id]['steps']:
                 if 'run' not in step:
                     continue
                 step_tokens = step['run'].split()
@@ -375,17 +329,61 @@ class HeuristicRecommendations(Recommendations):
             # Identify tokens that are paths
             paths = set()
             for token in tokens:
-                is_root_path = os.path.join(self.root_dir, token) in repository_paths
+                is_root_path = os.path.join(self.repository_dir, token) in repository_paths
                 is_relative_path = len(re.findall('\.{1}\/|\.{2}\/', token)) > 0
                 is_absolute_path = token.strip().startswith('/')
                 if is_root_path or is_relative_path or is_absolute_path:
                     # Normalize representations of paths
-                    normalized_path = token.replace(f'{self.root_dir}/', '')
-                    normalized_path = os.path.abspath(os.path.join(self.root_dir, normalized_path))
+                    normalized_path = token.replace(f'{self.repository_dir}/', '')
+                    normalized_path = os.path.abspath(os.path.join(self.repository_dir, normalized_path))
                     paths.add(normalized_path)
             
             # Identify common (parent) directory of paths (i.e. working directory)
-            candidate_paths = [path.replace(f'{self.root_dir}/', '') for path in paths if path in repository_paths]
+            candidate_paths = [path.replace(f'{self.repository_dir}/', '') for path in paths if path in repository_paths]
             working_directory = os.path.commonpath(candidate_paths).strip()
             recommendations[job_id] = f'./{working_directory}' if len(working_directory) > 0 else None
         return recommendations
+
+    def __repository_paths(self) -> list[str]:
+        """Get the paths of all files and directories in a repository"""
+        paths = {self.repository_dir}
+        for dirpath, dirnames, filenames in os.walk(self.repository_dir):
+            paths.update([os.path.join(dirpath, name) for name in dirnames + filenames])
+        return sorted(list(paths))
+    
+    def __env_filter(self) -> list[str]:
+        """Get the environmental variable filter"""
+        filter = []
+        with open(self.env_filter_path, 'r') as log:
+            for entry in log:
+                if entry.strip().startswith('#'):
+                    continue
+                filter.append(entry.strip())
+        return filter
+
+    def __uneven_chunks(self, group, min_chunk_size=1):
+        """Find all ways to split a group into uneven chunks."""
+        if len(group) < 2:
+            yield [group]
+            return
+
+        for i in range(min_chunk_size, len(group)):
+            for combo in combinations(range(1, len(group)), i):
+                split_points = [0] + list(combo) + [len(group)]
+                yield [group[split_points[j]:split_points[j+1]] for j in range(len(split_points)-1)]
+
+    def __yaml_parser(self) -> YAML:
+        """Get pre-configured yaml parser"""
+        ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
+        yaml_parser = YAML(pure=True)
+        yaml_parser.indent(sequence=4, offset=2)
+        yaml_parser.sort_base_mapping_type_on_output = False
+        yaml_parser.default_style = None
+        yaml_parser.width = 100
+        yaml_parser.ignore_aliases = lambda *args : True
+        return yaml_parser
+    
+    def __multiline(self, strings: list[str]) -> str:
+        """Retrieve multiline string that will be rendered properly"""
+        newline_strings = '\n'.join(strings) + '\n'
+        return LiteralScalarString(textwrap.dedent(f"""{newline_strings}"""))
