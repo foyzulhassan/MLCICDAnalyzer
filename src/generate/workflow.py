@@ -13,7 +13,7 @@ class Workflow:
                  output_dir: str,
                  job_parses: dict,
                  requirements_path: str = None):
-        self.workflow_name = workflow_name
+        self.workflow_name = workflow_name.split('.')[0]
         self.output_dir = output_dir
         self.job_parses = job_parses
         self.job_ids = list(job_parses.keys())
@@ -35,7 +35,7 @@ class Workflow:
 
     def dump(self):
         """Dump the workflow, as it has been built, to a file"""
-        workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.base')
+        workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.base.yaml')
         with open(workflow_path, 'w') as workflow_file:
             self.yaml_parser.dump(data=self.yaml, stream=workflow_file)
     
@@ -55,18 +55,18 @@ class Workflow:
         workflow_stream.close()
         return workflow_str
 
-    def __runner(self, runner: str = 'ubuntu'):
+    def __runner(self):
         """Specify the virtual machine that will be used to run the application"""
         for job_id in self.job_ids:
             job = self.yaml['jobs'][job_id]
-            job.update({'runs-on': runner})
+            job.update({'runs-on': '${{ matrix.os }}'})
 
     def __matrix(self):
         """Define different job configurations using variables"""
         for job_id in self.job_ids:
             job = self.yaml['jobs'][job_id]
             python_versions = self.job_parses[job_id]['versions']
-            job.update({'strategy': {'matrix': {'python-version': python_versions}}})
+            job.update({'strategy': {'matrix': {'os': 'ubuntu-latest', 'python-version': python_versions}}})
 
     def __checkout(self):
         """Add checkout action to job configurations"""
@@ -84,7 +84,7 @@ class Workflow:
             steps.append({'uses': 'actions/setup-python@v5', 'with': {'python-version': '${{ matrix.python-version }}', 'cache': 'pip'}})
             commands.append('python -m pip install --upgrade pip wheel setuptools')
             if self.requirements_path is not None:
-                commands.append('pip install -r requirements.txt')
+                commands.append('if [ -f requirements.txt ]; then pip install -r requirements.txt; fi')
             if self.job_parses[job_id]['requirements']:
                 requirements_str = ' '.join([f'{module}=={version}' if version is not None else f'{module}' for module, version in requirements.items()])
                 commands.append(f'pip install -I {requirements_str}')

@@ -4,13 +4,12 @@ import os
 from pathlib import Path
 import re
 
+from deepdiff import DeepDiff, Delta
+from deepdiff.serialization import json_dumps, json_loads
 from itertools import combinations
 import numpy as np
 from pymoo.decomposition.asf import ASF
-import ruamel.yaml
-from ruamel.yaml import YAML
-from ruamel.yaml.scalarstring import LiteralScalarString
-import textwrap
+import recommend.utils as utils
 
 
 class HeuristicRecommendations:
@@ -20,11 +19,9 @@ class HeuristicRecommendations:
                  repository_dir: str, 
                  env_filter_path: str = None):
         self.workflow_path = workflow_path
-        self.workflow_name = Path(self.workflow_path).stem
-        self.yaml_parser = self.__yaml_parser()
-        with open(self.workflow_path, 'r') as workflow_file:
-            self.workflow = self.yaml_parser.load(workflow_file)
-
+        self.workflow = utils.load_workflow(self.workflow_path)
+        self.workflow_name = Path(self.workflow_path).stem.split('.')[0]
+        
         self.repository_dir = repository_dir
         self.repository_paths = self.__repository_paths()
 
@@ -32,89 +29,88 @@ class HeuristicRecommendations:
         self.env_filter = self.__env_filter() if self.env_filter_path is not None else []
         self.output_dir = output_dir
 
-    def apply_all(self, dump: bool = False) -> dict:
-        """Apply all recommendations to a workflow"""
-        recommendations_path = os.path.join(self.output_dir, f'{self.workflow_name}.recommendations')
-        with open(recommendations_path, 'r') as recommendations_file:
-            recommendations = json.load(recommendations_file)
-
-        recommended_workflow = copy.deepcopy(self.workflow)
-        for job_id in recommended_workflow['jobs']:
-            for key, value in recommendations['jobs'][job_id].items():
-                new_value = value
-                if not value:
-                    continue
-                elif key == 'steps':
-                    recommended_workflow['jobs'][job_id]['steps'] = value
-                    for i in range(len(recommended_workflow['jobs'][job_id]['steps'])):
-                        if 'run' in recommended_workflow['jobs'][job_id]['steps'][i]:
-                            recommended_workflow['jobs'][job_id]['steps'][i]['run'] = \
-                                self.__multiline(recommended_workflow['jobs'][job_id]['steps'][i]['run'].strip().replace('\\n', '\n').split('\n'))
-                elif key not in recommended_workflow['jobs'][job_id] or 'update' not in recommended_workflow['jobs'][job_id][key]:
-                    recommended_workflow['jobs'][job_id][key] = new_value
-                else:
-                    recommended_workflow['jobs'][job_id][key].update(new_value)
-        
-        if dump:
-            recommended_workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.yaml')
-            with open(recommended_workflow_path, 'w') as recommended_workflow_file:
-                self.yaml_parser.dump(recommended_workflow, recommended_workflow_file)
-        return recommended_workflow
+    def apply(self, id: int = None, dump: bool = False) -> dict:
+        """Apply one or all recommendations to a workflow"""
+        workflow = copy.deepcopy(self.workflow)
+        heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.recommendations')
+        if os.path.isfile(heuristic_path):
+            delta = Delta(delta_path=heuristic_path, deserializer=json_loads)
+            edit_actions = self.__parse_recommendations(delta)
+            if id is not None:
+                workflow += Delta(edit_actions[id], serializer=json_dumps, always_include_values=True)
+            else:
+                for action in edit_actions:
+                    workflow += Delta(action, serializer=json_dumps, always_include_values=True)
+            if dump:
+                workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.yaml')
+                utils.dump_workflow(workflow, workflow_path)
+        return workflow
 
     def recommendations(self, dump: bool = False) -> dict:
         """Get all recommendations for a workflow"""
-        recommendations = {'jobs': {job_id: {} for job_id in self.workflow['jobs']}}
+        improved_workflow = copy.deepcopy(self.workflow)
 
         concurrency = self.__concurrency()
         for job_id in concurrency:
             if concurrency[job_id] is None:
                 continue
-            recommendations['jobs'][job_id]['concurrency'] = concurrency[job_id]
+            improved_workflow['jobs'][job_id]['concurrency'] = concurrency[job_id]
 
         env = self.__env()
         for job_id in env:
             if env[job_id] is None:
                 continue
-            recommendations['jobs'][job_id]['env'] = env[job_id]
+            improved_workflow['jobs'][job_id]['env'] = env[job_id]
 
         needs, needs_env = self.__needs()
         for job_id in needs:
             if needs[job_id] is not None:
-                recommendations['jobs'][job_id]['needs'] = needs[job_id]
+                improved_workflow['jobs'][job_id]['needs'] = needs[job_id]
             if needs_env[job_id] is not None:
-                recommendations['jobs'][job_id]['env'] = needs_env[job_id]
+                improved_workflow['jobs'][job_id]['env'] = needs_env[job_id]
 
         outputs = self.__outputs()
         for job_id in outputs:
             if outputs[job_id] is None:
                 continue
-            recommendations['jobs'][job_id]['outputs'] = outputs[job_id]
+            improved_workflow['jobs'][job_id]['outputs'] = outputs[job_id]
 
         steps = self.__steps()
         for job_id in steps:
             if steps[job_id] is None:
                 continue
-            recommendations['jobs'][job_id]['steps'] = copy.deepcopy(self.workflow['jobs'][job_id]['steps'])
-            recommendations['jobs'][job_id]['steps'].pop() # Remove large step which is the last in the implementation
-            recommendations['jobs'][job_id]['steps'].extend(steps[job_id])
+            improved_workflow['jobs'][job_id]['steps'].pop() # Remove large step which is the last in the implementation
+            improved_workflow['jobs'][job_id]['steps'].extend(steps[job_id])
+            for i in range(len(improved_workflow['jobs'][job_id]['steps'])): # Render multiline strings in steps properly
+                if 'run' not in improved_workflow['jobs'][job_id]['steps'][i]:
+                    continue
+                improved_workflow['jobs'][job_id]['steps'][i]['run'] = utils.to_multiline_str(
+                    improved_workflow['jobs'][job_id]['steps'][i]['run'] \
+                        .strip() \
+                        .replace('\\n', '\n') \
+                        .split('\n'))
 
         timeout_minutes = self.__timeout_minutes()
         for job_id in timeout_minutes:
             if timeout_minutes[job_id] is None:
                 continue
-            recommendations['jobs'][job_id]['timeout-minutes'] = timeout_minutes[job_id]
+            improved_workflow['jobs'][job_id]['timeout-minutes'] = timeout_minutes[job_id]
 
         working_directory = self.__working_directory()
         for job_id in working_directory:
             if working_directory[job_id] is None:
                 continue
-            recommendations['jobs'][job_id]['defaults']['run']['working-directory'] = working_directory[job_id]
+            improved_workflow['jobs'][job_id]['defaults']['run']['working-directory'] = working_directory[job_id]
+
+        diff = DeepDiff(self.workflow, improved_workflow)
+        delta = Delta(diff, serializer=json_dumps, always_include_values=True)
+        delta_dict = delta.to_dict()
 
         if dump:
-            recommendations_path = os.path.join(self.output_dir, f'{self.workflow_name}.recommendations')
-            with open(recommendations_path, 'w') as recommendations_file:
-                json.dump(recommendations, recommendations_file, indent=2)
-        return recommendations
+            heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.recommendations')
+            with open(heuristic_path, 'w') as file:
+                delta.dump(file) if delta_dict else json.dump({})
+        return json.loads(delta.dumps()) if delta_dict else self.workflow
 
     def __concurrency(self, threshold: int = 600) -> dict:
         """Get concurrency recommendations"""
@@ -285,7 +281,7 @@ class HeuristicRecommendations:
             run = self.workflow['jobs'][job_id]['steps'][-1]['run'].splitlines()
             recommendations[job_id] = []
             for start, end, _ in decision:
-                step = self.__multiline(run[start-1:end])
+                step = utils.to_multiline_str(run[start-1:end])
                 #step = '\n'.join(run[start-1:end])
                 recommendations[job_id].append({'run': step})
         return recommendations
@@ -340,8 +336,10 @@ class HeuristicRecommendations:
             
             # Identify common (parent) directory of paths (i.e. working directory)
             candidate_paths = [path.replace(f'{self.repository_dir}/', '') for path in paths if path in repository_paths]
-            working_directory = os.path.commonpath(candidate_paths).strip()
-            recommendations[job_id] = f'./{working_directory}' if len(working_directory) > 0 else None
+            recommendations[job_id] = None
+            if candidate_paths:
+                working_directory = os.path.commonpath(candidate_paths)
+                recommendations[job_id] = f'./{working_directory}' if len(working_directory) > 0 else None
         return recommendations
 
     def __repository_paths(self) -> list[str]:
@@ -372,18 +370,10 @@ class HeuristicRecommendations:
                 split_points = [0] + list(combo) + [len(group)]
                 yield [group[split_points[j]:split_points[j+1]] for j in range(len(split_points)-1)]
 
-    def __yaml_parser(self) -> YAML:
-        """Get pre-configured yaml parser"""
-        ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
-        yaml_parser = YAML(pure=True)
-        yaml_parser.indent(sequence=4, offset=2)
-        yaml_parser.sort_base_mapping_type_on_output = False
-        yaml_parser.default_style = None
-        yaml_parser.width = 100
-        yaml_parser.ignore_aliases = lambda *args : True
-        return yaml_parser
-    
-    def __multiline(self, strings: list[str]) -> str:
-        """Retrieve multiline string that will be rendered properly"""
-        newline_strings = '\n'.join(strings) + '\n'
-        return LiteralScalarString(textwrap.dedent(f"""{newline_strings}"""))
+    def __parse_recommendations(self, delta: Delta) -> list:
+        """Parse individual requirements from Delta"""
+        edit_actions = []
+        for group, actions in delta.to_dict().items():
+            for name, action in actions.items():
+                edit_actions.append({group: {name: action}})
+        return edit_actions

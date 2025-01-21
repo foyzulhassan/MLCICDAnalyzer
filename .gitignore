@@ -1,6 +1,7 @@
 # Custom
 *.yml
 *.yaml
+*.key
 out/
 
 # Byte-compiled / optimized / DLL files

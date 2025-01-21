@@ -12,7 +12,7 @@ class ParseTrace:
                  requirements_path: str = None,
                  docker_path: str = None):
         self.target_path = target_path
-        self.target_name = Path(self.target_path).stem
+        self.target_name = Path(self.target_path).stem.split('.')[0]
         self.output_dir = output_dir
         self.strace_path = os.path.join(output_dir, f'{self.target_name}.strace')
         self.packages_path = os.path.join(output_dir, 'packages.pip')
@@ -24,9 +24,9 @@ class ParseTrace:
         parse = {
             'script': self.script(),
             'versions': self.versions(),
-            'requirements': self.requirements() if self.requirements_path is not None else None,
+            'requirements': self.requirements() if self.requirements_path else None,
             'ports': self.ports(),
-            'services': self.services() if self.docker_path is not None else None}
+            'services': self.services() if self.docker_path else None}
         if dump:
             parse_path = os.path.join(self.output_dir, f'{self.target_name}.parse')
             with open(parse_path, 'w') as parse_file:
