@@ -11,7 +11,7 @@ def parse_packages(output_path: str, dump: bool = False):
     for package_name in package_names:
         process = subprocess.run(f'pip show --no-input {package_name}', capture_output=True, text=True, shell=True)
         header = HeaderParser().parsestr(process.stdout)
-        requires = {require for require in header['Requires'].split(', ') if require.strip() != ''}
+        requires = {require for require in header['Requires'].split(', ') if require.strip() != ''} if 'Requires' in header else set()
         packages[package_name] = {
             'version': header['Version'],
             'requires': sorted(list(requires))}

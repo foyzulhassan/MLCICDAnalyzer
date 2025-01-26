@@ -50,7 +50,7 @@ class TraceTarget:
             target_path = self.target_path
         commands = []
         ltrace_path = os.path.join(self.output_dir, f'{self.target_name}.ltrace')
-        commands.append(f'ltrace -fbTC -e -tt *env -o {ltrace_path} bash {target_path}')
+        commands.append(f'ltrace -fbTC -tt -e *env -o {ltrace_path} bash {target_path}')
         if self.patch_dir is not None:
             commands = self.__python_env(commands)
         commands = self.__working_directory(commands)

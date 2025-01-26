@@ -100,6 +100,8 @@ class HeuristicRecommendations:
         for job_id in working_directory:
             if working_directory[job_id] is None:
                 continue
+            if 'defaults' not in improved_workflow['jobs'][job_id]:
+                improved_workflow['jobs'][job_id]['defaults'] = {'run': {'working-directory': None}}
             improved_workflow['jobs'][job_id]['defaults']['run']['working-directory'] = working_directory[job_id]
 
         diff = DeepDiff(self.workflow, improved_workflow)
@@ -156,7 +158,7 @@ class HeuristicRecommendations:
                     for entry in log:
                         if not entry.strip():
                             continue
-                        key, value = entry.split('=')
+                        key, value = entry.split('=', 1)
                         candidate_env[key.strip()] = value.strip()
 
             # Check whether a ltrace log exists for the job and identify env variables

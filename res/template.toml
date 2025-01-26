@@ -38,4 +38,4 @@ docker_path = ""
 env_filter_path = ""
 
 # absolute path to a file containing a GitHub Actions Workflow JSON Schema
-workflow_schema_path = ""
+schema_path = ""
