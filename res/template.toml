@@ -10,7 +10,7 @@ output_dir = ""
 # absolute path to a pip requirements file
 requirements_path = ""
 
-# absolute path to a pip requirements file
+# absolute path to the directory of the repository
 repository_dir = ""
 
 # absolute path to a directory to run targets in
@@ -18,9 +18,6 @@ working_dir = ""
 
 # absolute path to a directory that contains the patcher (i.e. sitecustomize.py)
 patch_dir = ""
-
-# absolute path to a file that contains a package tracer (i.e. packages.py)
-packages_path = ""
 
 # OpenAI API key for LLM interaction
 api_key = ""
@@ -39,3 +36,6 @@ env_filter_path = ""
 
 # absolute path to a file containing a GitHub Actions Workflow JSON Schema
 schema_path = ""
+
+# absolute path to a file that orders workflow syntax keys
+order_path = ""

@@ -2,30 +2,36 @@ import os
 from pathlib import Path
 import subprocess
 
+import tree_sitter_bash as tsbash
+from tree_sitter import Language, Parser
+
 
 class TraceTarget:
     def __init__(self, 
                  target_path: str, 
                  output_dir: str,
                  working_dir: str,
-                 packages_path: str,
+                 repository_dir: str,
+                 requirements_path: str = None,
                  patch_dir: str = None,
                  new_trace: bool = False):
         self.target_path = target_path
         self.target_name = Path(self.target_path).stem.split('.')[0]
         self.output_dir = output_dir
         self.working_dir = working_dir
-        self.packages_path = packages_path
+        self.repository_dir = repository_dir
+        self.requirements_path = requirements_path
         self.patch_dir = patch_dir
         self.new_trace = new_trace
         os.makedirs(self.output_dir, exist_ok=True)
 
     def trace(self):
         """Trace a (instrumented) target script with strace and ltrace"""
-        timestamped_path = os.path.join(self.output_dir, f'{self.target_name}.timestamped.sh')
+        timestamped_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps.sh')
+        timestamps_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps')
         strace_path = os.path.join(self.output_dir, f'{self.target_name}.strace')
         ltrace_path = os.path.join(self.output_dir, f'{self.target_name}.ltrace')
-        if self.new_trace or not os.path.isfile(timestamped_path):
+        if self.new_trace or not os.path.isfile(timestamps_path):
             self.__timestamp(dump=True)
         if self.new_trace or not os.path.isfile(strace_path):
             self.strace(timestamped_path) # get timestamps while tracing
@@ -38,7 +44,7 @@ class TraceTarget:
             target_path = self.target_path
         strace_path = os.path.join(self.output_dir, f'{self.target_name}.strace')
         commands = [f'strace --follow-forks --decode-fds=path --trace=%file,%network --quiet=all --successful-only --absolute-timestamps=format:unix,precision:us --output={strace_path} bash {target_path}']
-        commands = self.__packages(commands) # done here to capture virtual environment (if used)
+        commands = self.__requirements(commands) # done here to capture virtual environment (if used)
         commands = self.__working_directory(commands)
         commands_str = '; '.join(commands)
         result = subprocess.run(commands_str, shell=True)
@@ -58,11 +64,13 @@ class TraceTarget:
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
     
-    def __packages(self, commands: list[str]) -> list[str]:
+    def __requirements(self, commands: list[str]) -> list[str]:
         wrapper = []
-        packages_path = os.path.join(self.output_dir, 'packages.pip')
+        requirements_path = os.path.join(self.output_dir, f'{self.target_name}.requirements')
         wrapper.extend(commands)
-        wrapper.append(f'python3 {self.packages_path} {packages_path}')
+        diff_requirements = f' --diff {self.requirements_path}' if self.requirements_path is not None else ''
+        wrapper.append(f'touch {requirements_path}')
+        wrapper.append(f'pipreqs --use-local --scan-notebooks{diff_requirements} --savepath {requirements_path} {self.repository_dir}')
         return wrapper
 
     def __working_directory(self, commands: list[str]) -> list[str]:
@@ -81,52 +89,33 @@ class TraceTarget:
         wrapper.extend(commands)
         return wrapper
 
-    def __timestamp(self, target_path: str = None, dump: bool = False) -> list[str]:
+    def __timestamp(self, target_path: str = None, dump: bool = False) -> str:
         """Timestamp unnested executable lines and blocks in target script"""
-        if target_path is None:
-            target_path = self.target_path
+        # Load the target script
+        target_path = self.target_path if target_path is None else target_path
         timestamp_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps')
-        if os.path.isfile(timestamp_path): # Removed to enable appending
-            os.remove(timestamp_path)
+        with open(target_path, 'r') as target_file:
+            target = target_file.read().strip()
 
-        lines = ['STARTING_EPOCH_TIME=$(date +%s)\n', 'PREVIOUS_TIME=0\n'] # Get initial time first to find the incremental time later
-        block_depth = 0
-        starting_line_number = 0
-        current_line_number = 0
-        with open(target_path, 'r') as target:
-            for line in target:
-                # Record the line
-                lines.append(line if line.endswith('\n') else line + '\n')
-                current_line_number += 1
+        # Insert timestamps into target script
+        BASH_LANGUAGE = Language(tsbash.language())
+        parser = Parser(BASH_LANGUAGE)
+        tree = parser.parse(target.encode())
+        lines = ['STARTING_EPOCH_TIME=$(date +%s)', 'PREVIOUS_TIME=0']
+        line_num = 0
+        for child in tree.root_node.children:
+            if child.type == 'comment':
+                continue
+            line_height = child.text.decode().count('\n')+1
+            lines.append(f'{child.text.decode()}')
+            lines.append(f'printf "%d,%d,%d\\n" {line_num} {line_num + line_height} $(($(date +%s) - $STARTING_EPOCH_TIME - $PREVIOUS_TIME)) >> {timestamp_path}')
+            lines.append('PREVIOUS_TIME=$(($(date +%s) - $STARTING_EPOCH_TIME))')
+            line_num = line_num + line_height
+        timestamp_target = '\n'.join(lines).strip()
 
-                # Skip the line if it is a single-line comment or empty
-                if line.strip().startswith('#') or line.strip() == '':
-                    continue
-                
-                # Identify if the line is the header of a block
-                if line.strip().startswith(('if', 'for', 'while', 'case', ': \'')) or line.strip().endswith('{'):
-                    if block_depth == 0: # Indicate the start of a new block
-                        starting_line_number = current_line_number
-                    block_depth += 1
-                    continue
-
-                # Check if line is the end of a block and timestamp it if it is
-                if line.strip().startswith(('fi', 'done', '}', 'esac', '\'')) or line.strip().endswith(('; fi', '; done', '; }', '; esac')):
-                    if block_depth == 0: # End of block is indicated at root
-                        raise Exception('block_depth < 0')
-                    block_depth -= 1
-                    if line.strip().startswith('\''): # Skip timestamping the block if it is the end of a multi-line comment
-                        continue
-
-                # Timeline line that is not the start nor end of a block or a comment
-                if block_depth == 0:
-                    starting_line_number = current_line_number
-                lines.append(f'printf "%d,%d,%d\\n" {starting_line_number} {current_line_number} $(($(date +%s) - $STARTING_EPOCH_TIME - $PREVIOUS_TIME)) >> {timestamp_path}\n')
-                lines.append('PREVIOUS_TIME=$(($(date +%s) - $STARTING_EPOCH_TIME))\n')
-
-        # Dump timestamped target script to a file
+        # Dump timestamped target script
         if dump:
-            timestamp_path = os.path.join(self.output_dir, f'{self.target_name}.timestamped.sh')
-            with open(timestamp_path, 'w') as script:
-                script.writelines(lines)
-        return lines
+            timestamp_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps.sh')
+            with open(timestamp_path, 'w') as file:
+                file.write(timestamp_target)
+        return timestamp_target

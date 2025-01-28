@@ -3,6 +3,7 @@
 *.yaml
 *.key
 out/
+.modules/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

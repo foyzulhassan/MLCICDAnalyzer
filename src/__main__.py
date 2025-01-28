@@ -1,8 +1,14 @@
 import argparse
+import glob
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+
+tool_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+modules_dirs = glob.glob(os.path.join(tool_dir, '.modules/lib/python*/site-packages'))
+sys.path.extend(modules_dirs)
 
 from generate.trace import TraceTarget
 from generate.parse import ParseTrace
@@ -18,7 +24,8 @@ def generate_base_workflow(job_parses: dict):
         workflow_name=CONFIG.workflow_name, 
         output_dir=CONFIG.output_dir, 
         job_parses=job_parses, 
-        requirements_path=CONFIG.requirements_path)
+        requirements_path=CONFIG.requirements_path,
+        order_path=CONFIG.order_path)
     workflow.construct(dump=True)
 
 
@@ -60,7 +67,8 @@ def trace_target(target_path: str):
         target_path=target_path,
         output_dir=CONFIG.output_dir,
         working_dir=CONFIG.working_dir,
-        packages_path=CONFIG.packages_path,
+        repository_dir=CONFIG.repository_dir,
+        requirements_path=CONFIG.requirements_path,
         patch_dir=CONFIG.patch_dir,
         new_trace=CONFIG.new_trace)
     trace.trace()
@@ -71,7 +79,7 @@ def parse_trace(target_path: str):
     parse = ParseTrace(
         target_path=target_path,
         output_dir=CONFIG.output_dir,
-        requirements_path=CONFIG.requirements_path,
+        env_filter_path=CONFIG.env_filter_path,
         docker_path=CONFIG.docker_path)
     return parse.parse(dump=True)
 
@@ -91,6 +99,13 @@ def generate_docker(destination_dir: str):
         subprocess.run(command, stdout=file, shell=True)
 
 
+def install_dependencies():
+    """Install the python dependencies that this tool uses"""
+    tool_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    install_path = os.path.join(tool_dir, 'res', 'install.sh')
+    subprocess.run(f'bash {install_path}', shell=True)
+
+
 def parse_config(config_path: str):
     """Parse options from a configuration file"""
     class Config(dict):
@@ -104,17 +119,30 @@ def parse_config(config_path: str):
 def parse_args():
     """Parse arguments from the command line"""
     parser = argparse.ArgumentParser(description="Trace an application, generate a workflow, and augment it with recommendations.")
-    parser.add_argument('-a', '--apply_recommendation', nargs=3, default=None, 
-        help='(1) path to a workflow, (2) path to a recommendation file, and (3) id of a recommendation to apply')
+    parser.add_argument('-a', '--apply_recommendation', action='store_true', help='whether to apply recommendation to current workflow')
     parser.add_argument('-c', '--config_path', type=str, default=None, help='path to a configuration file')
     parser.add_argument('-d', '--new_docker', type=str, default=None, help='path to directory to store a new docker log')
     parser.add_argument('-i', '--interactive', action='store_true', help='whether to launch in interactive mode')
+    parser.add_argument('-m', '--no_model', action='store_true', default=None, help='whether to not prompt for model recommendations (even if an api key is supplied)')
     parser.add_argument('-n', '--new_config', type=str, default=None, help='path to directory to generate a new config template')
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+
+    # Check whether dependencies have been installed
+    if '.modules' not in os.listdir(tool_dir):
+        print('DependenciesNotFound: Execute this tool with the --install option to install dependencies before running')
+        return
+
+    # Import here because dependencies are found
+    from generate.trace import TraceTarget
+    from generate.parse import ParseTrace
+    from generate.workflow import Workflow
+    from recommend.heuristics import HeuristicRecommendations
+    from recommend.model import ModelRecommendations
+    import toml
     
     # Check whether to generate a new config file
     if args.new_config is not None:
@@ -124,13 +152,6 @@ def main():
     # Check whether to generate a new docker log
     if args.new_docker is not None:
         generate_docker(args.new_docker)
-        return
-    
-    # Check whether to apply a specified recommendation to a workflow
-    if args.apply_recommendation is not None:
-        workflow_path = args.apply_recommendation[0]
-        recommendations_path = args.apply_recommendation[1]
-        recommendation_id = args.apply_recommendation[2]
         return
 
     # Check whether to run in interactive mode
@@ -143,16 +164,17 @@ def main():
         return
     global CONFIG
     CONFIG = parse_config(args.config_path)
-    
+
     # Generate and parse traces for the target scripts
     job_parses = get_job_parses()
     base_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.base.yaml')
     heuristic_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.heuristic.yaml')
+    model_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.model.yaml')
 
     # Generate workflows
     generate_base_workflow(job_parses)
     apply_heuristic_recommendations(base_path)
-    if CONFIG.api_key:
+    if CONFIG.api_key and not args.no_model:
         apply_model_recommendations(heuristic_path)
 
 

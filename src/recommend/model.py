@@ -108,7 +108,7 @@ class ModelRecommendations():
             'content': (
                 'You are a senior devops engineer. '
                 'You are an expert in GitHub Actions workflows. '
-                'Your job is to improve GitHub Actions workflows. '
+                'Your job is to create and improve GitHub Actions workflows. '
                 'Your GitHub Actions workflows must have valid syntax.'
             )
         }
@@ -121,9 +121,21 @@ class ModelRecommendations():
             'content': (
                 '# Workflow\n'
                 f'{self.workflow_str}\n\n'
+                '# Background Knowledge\n'
+                f'{self.__knowledge()}\n\n'
                 '# Instructions\n'
                 '- Improve the GitHub Actions Workflow.\n'
+                '- Reflect on the Background Knowledge before making improvements.\n'
                 '- Only output the improved GitHub Actions Workflow.\n'
                 '- Do not explain the changes that were made.'
             )
         }
+
+    def __knowledge(self) -> str:
+        knowledge = []
+        for job_id in self.workflow['jobs']:
+            instruction_path = os.path.join(self.output_dir, f'{job_id}.knowledge')
+            with open(instruction_path, 'r') as file:
+                knowledge += file.readlines()
+        knowledge_str = '\n'.join([f'- {fact}' for fact in knowledge]).strip()
+        return knowledge_str
