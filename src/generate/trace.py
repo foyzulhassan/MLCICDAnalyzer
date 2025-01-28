@@ -10,15 +10,15 @@ class TraceTarget:
     def __init__(self, 
                  target_path: str, 
                  output_dir: str,
-                 working_dir: str,
                  repository_dir: str,
+                 working_dir: str = None,
                  requirements_path: str = None,
                  patch_dir: str = None,
                  new_trace: bool = False):
         self.target_path = target_path
         self.target_name = Path(self.target_path).stem.split('.')[0]
         self.output_dir = output_dir
-        self.working_dir = working_dir
+        self.working_dir = working_dir if working_dir else repository_dir
         self.repository_dir = repository_dir
         self.requirements_path = requirements_path
         self.patch_dir = patch_dir

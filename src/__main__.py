@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 
 tool_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 modules_dirs = glob.glob(os.path.join(tool_dir, '.modules/lib/python*/site-packages'))
@@ -106,43 +107,45 @@ def install_dependencies():
     subprocess.run(f'bash {install_path}', shell=True)
 
 
-def parse_config(config_path: str):
+def parse_config(config_path: str, new_trace: bool = False):
     """Parse options from a configuration file"""
     class Config(dict):
         __getattr__ = dict.get
         __setattr__ = dict.__setitem__
         __delattr__ = dict.__delitem__
+    tool_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    res_dir = os.path.join(tool_dir, 'res')
     config_dict = toml.load(config_path)
+    config_dict['new_trace'] = new_trace
+    config_dict['patch_dir'] = res_dir
+    config_dict['env_filter_path'] = os.path.join(res_dir, 'env_filter.txt')
+    config_dict['schema_path'] = os.path.join(res_dir, 'github-workflow.json')
+    config_dict['order_path'] = os.path.join(res_dir, 'syntax-order.txt')
     return Config(config_dict)
 
 
 def parse_args():
     """Parse arguments from the command line"""
     parser = argparse.ArgumentParser(description="Trace an application, generate a workflow, and augment it with recommendations.")
-    parser.add_argument('-a', '--apply_recommendation', action='store_true', help='whether to apply recommendation to current workflow')
-    parser.add_argument('-c', '--config_path', type=str, default=None, help='path to a configuration file')
-    parser.add_argument('-d', '--new_docker', type=str, default=None, help='path to directory to store a new docker log')
+    parser.add_argument('-a', '--apply-recommendation', dest='apply_recommendation', action='store_true', help='whether to apply recommendation to current workflow')
+    parser.add_argument('-c', '--config-path', dest='config_path', type=str, default=None, help='path to a configuration file')
+    parser.add_argument('-d', '--new-docker', dest='new_docker', type=str, default=None, help='path to directory to store a new docker log')
     parser.add_argument('-i', '--interactive', action='store_true', help='whether to launch in interactive mode')
-    parser.add_argument('-m', '--no_model', action='store_true', default=None, help='whether to not prompt for model recommendations (even if an api key is supplied)')
-    parser.add_argument('-n', '--new_config', type=str, default=None, help='path to directory to generate a new config template')
+    parser.add_argument('-n', '--new-config', dest='new_config', type=str, default=None, help='path to directory to generate a new config template')
+    parser.add_argument('--new-trace', dest='new_trace', action='store_true', default=None, help='whether to override existing artifacts in the output directory and trace again')
+    parser.add_argument('--no-model', dest='no_model', action='store_true', default=None, help='whether to not prompt for model recommendations (even if an api key is supplied)')
+    parser.add_argument('--no-artifacts', dest='no_artifacts', action='store_true', default=None, help='whether keep non-yaml artifacts that the tool produces')
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    start_time = time.time()
 
     # Check whether dependencies have been installed
     if '.modules' not in os.listdir(tool_dir):
         print('DependenciesNotFound: Execute this tool with the --install option to install dependencies before running')
         return
-
-    # Import here because dependencies are found
-    from generate.trace import TraceTarget
-    from generate.parse import ParseTrace
-    from generate.workflow import Workflow
-    from recommend.heuristics import HeuristicRecommendations
-    from recommend.model import ModelRecommendations
-    import toml
     
     # Check whether to generate a new config file
     if args.new_config is not None:
@@ -163,7 +166,7 @@ def main():
         print(f'FileNotFound: No config file at "{args.config_path}"')
         return
     global CONFIG
-    CONFIG = parse_config(args.config_path)
+    CONFIG = parse_config(args.config_path, args.new_trace)
 
     # Generate and parse traces for the target scripts
     job_parses = get_job_parses()
@@ -176,6 +179,15 @@ def main():
     apply_heuristic_recommendations(base_path)
     if CONFIG.api_key and not args.no_model:
         apply_model_recommendations(heuristic_path)
+
+    # Check whether to remove artifacts (besides yaml files and files accessed before the execution)
+    if args.no_artifacts:
+        for dirpath, _, filenames in os.walk(CONFIG.output_dir):
+            for filename in filenames:
+                artifact_path = os.path.join(dirpath, filename)
+                if not filename.endswith('.yaml') and os.path.getatime(artifact_path) >= start_time:
+                    # Files that were accidently put in output dir are (likely) not automatically removed due to the access time check
+                    os.remove(artifact_path)
 
 
 if __name__ == '__main__':
