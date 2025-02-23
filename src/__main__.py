@@ -7,9 +7,10 @@ import subprocess
 import sys
 import time
 
-tool_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-modules_dirs = glob.glob(os.path.join(tool_dir, '.modules/lib/python*/site-packages'))
-sys.path.extend(modules_dirs)
+# Import vendored libraries before the modules that depend on them
+TOOL_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+MODULES_DIR = glob.glob(os.path.join(TOOL_DIR, '.modules/lib/python*/site-packages'))
+sys.path.extend(MODULES_DIR)
 
 from generate.trace import TraceTarget
 from generate.parse import ParseTrace
@@ -30,13 +31,13 @@ def generate_base_workflow(job_parses: dict):
     workflow.construct(dump=True)
 
 
-def apply_heuristic_recommendations(workflow_path: str):
+def apply_heuristic_recommendations(workflow_path: str, job_parses: dict):
     """Apply heuristic recommendations to workflow"""
     heuristic = HeuristicRecommendations(
         workflow_path=workflow_path,
         output_dir=CONFIG.output_dir,
         repository_dir=CONFIG.repository_dir,
-        env_filter_path=CONFIG.env_filter_path)
+        job_parses=job_parses)
     heuristic.recommendations(dump=True)
     heuristic.apply(dump=True)
 
@@ -69,7 +70,7 @@ def trace_target(target_path: str):
         output_dir=CONFIG.output_dir,
         working_dir=CONFIG.working_dir,
         repository_dir=CONFIG.repository_dir,
-        requirements_path=CONFIG.requirements_path,
+        packages_path=CONFIG.packages_path,
         patch_dir=CONFIG.patch_dir,
         new_trace=CONFIG.new_trace)
     trace.trace()
@@ -80,6 +81,7 @@ def parse_trace(target_path: str):
     parse = ParseTrace(
         target_path=target_path,
         output_dir=CONFIG.output_dir,
+        requirements_path=CONFIG.requirements_path,
         env_filter_path=CONFIG.env_filter_path,
         docker_path=CONFIG.docker_path)
     return parse.parse(dump=True)
@@ -102,8 +104,7 @@ def generate_docker(destination_dir: str):
 
 def install_dependencies():
     """Install the python dependencies that this tool uses"""
-    tool_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    install_path = os.path.join(tool_dir, 'res', 'install.sh')
+    install_path = os.path.join(TOOL_DIR, 'res', 'install.sh')
     subprocess.run(f'bash {install_path}', shell=True)
 
 
@@ -113,11 +114,11 @@ def parse_config(config_path: str, new_trace: bool = False):
         __getattr__ = dict.get
         __setattr__ = dict.__setitem__
         __delattr__ = dict.__delitem__
-    tool_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    res_dir = os.path.join(tool_dir, 'res')
+    res_dir = os.path.join(TOOL_DIR, 'res')
     config_dict = toml.load(config_path)
     config_dict['new_trace'] = new_trace
     config_dict['patch_dir'] = res_dir
+    config_dict['packages_path'] = os.path.join(res_dir, 'packages.py')
     config_dict['env_filter_path'] = os.path.join(res_dir, 'env_filter.txt')
     config_dict['schema_path'] = os.path.join(res_dir, 'github-workflow.json')
     config_dict['order_path'] = os.path.join(res_dir, 'syntax-order.txt')
@@ -143,7 +144,7 @@ def main():
     start_time = time.time()
 
     # Check whether dependencies have been installed
-    if '.modules' not in os.listdir(tool_dir):
+    if not os.path.isdir(os.path.join(TOOL_DIR, '.modules')):
         print('DependenciesNotFound: Execute this tool with the --install option to install dependencies before running')
         return
     
@@ -172,22 +173,22 @@ def main():
     job_parses = get_job_parses()
     base_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.base.yaml')
     heuristic_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.heuristic.yaml')
-    model_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.model.yaml')
+    # model_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.model.yaml')
 
     # Generate workflows
     generate_base_workflow(job_parses)
-    apply_heuristic_recommendations(base_path)
-    if CONFIG.api_key and not args.no_model:
-        apply_model_recommendations(heuristic_path)
+    apply_heuristic_recommendations(workflow_path=base_path, job_parses=job_parses)
+    # if CONFIG.api_key and not args.no_model:
+    #     apply_model_recommendations(heuristic_path)
 
     # Check whether to remove artifacts (besides yaml files and files accessed before the execution)
-    if args.no_artifacts:
-        for dirpath, _, filenames in os.walk(CONFIG.output_dir):
-            for filename in filenames:
-                artifact_path = os.path.join(dirpath, filename)
-                if not filename.endswith('.yaml') and os.path.getatime(artifact_path) >= start_time:
-                    # Files that were accidently put in output dir are (likely) not automatically removed due to the access time check
-                    os.remove(artifact_path)
+    # if args.no_artifacts:
+    #     for dirpath, _, filenames in os.walk(CONFIG.output_dir):
+    #         for filename in filenames:
+    #             artifact_path = os.path.join(dirpath, filename)
+    #             if not filename.endswith('.yaml') and os.path.getatime(artifact_path) >= start_time:
+    #                 # Files that were accidently put in output dir are (likely) not automatically removed due to the access time check
+    #                 os.remove(artifact_path)
 
 
 if __name__ == '__main__':

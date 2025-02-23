@@ -1,4 +1,6 @@
+from copy import deepcopy
 from io import StringIO
+from itertools import combinations
 import textwrap
 
 from jsonschema import validate
@@ -42,9 +44,15 @@ def load_workflow(workflow_path: str, as_str: bool = False) -> str | dict:
 
 def dump_workflow(workflow: dict, output_path: str):
     """Dump a workflow to a file"""
+    copied = deepcopy(workflow)
+    for job_id in copied['jobs']:
+        for i, step in enumerate(copied['jobs'][job_id]['steps']):
+            if 'run' in step:
+                copied['jobs'][job_id]['steps'][i]['run'] = to_multiline_str(copied['jobs'][job_id]['steps'][i]['run'].splitlines())
+
     yaml_parser = get_yaml_parser()
     with open(output_path, 'w') as file:
-        yaml_parser.dump(workflow, file)
+        yaml_parser.dump(copied, file)
 
 
 def get_yaml_parser() -> YAML:
@@ -63,3 +71,15 @@ def to_multiline_str(strings: list) -> str:
     """Retrieve multiline string that will be rendered properly"""
     newline_strings = '\n'.join(strings) + '\n'
     return LiteralScalarString(textwrap.dedent(f"""{newline_strings}"""))
+
+
+def uneven_chunks(group, min_chunk_size=1):
+    """Find all ways to split a group into uneven chunks."""
+    if len(group) < 2:
+        yield [group]
+        return
+
+    for i in range(min_chunk_size, len(group)):
+        for combo in combinations(range(1, len(group)), i):
+            split_points = [0] + list(combo) + [len(group)]
+            yield [group[split_points[j]:split_points[j+1]] for j in range(len(split_points)-1)]

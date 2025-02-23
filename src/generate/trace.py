@@ -12,7 +12,7 @@ class TraceTarget:
                  output_dir: str,
                  repository_dir: str,
                  working_dir: str = None,
-                 requirements_path: str = None,
+                 packages_path: str = None,
                  patch_dir: str = None,
                  new_trace: bool = False):
         self.target_path = target_path
@@ -20,7 +20,7 @@ class TraceTarget:
         self.output_dir = output_dir
         self.working_dir = working_dir if working_dir else repository_dir
         self.repository_dir = repository_dir
-        self.requirements_path = requirements_path
+        self.packages_path = packages_path
         self.patch_dir = patch_dir
         self.new_trace = new_trace
         os.makedirs(self.output_dir, exist_ok=True)
@@ -44,7 +44,7 @@ class TraceTarget:
             target_path = self.target_path
         strace_path = os.path.join(self.output_dir, f'{self.target_name}.strace')
         commands = [f'strace --follow-forks --decode-fds=path --trace=%file,%network --quiet=all --successful-only --absolute-timestamps=format:unix,precision:us --output={strace_path} bash {target_path}']
-        commands = self.__requirements(commands) # done here to capture virtual environment (if used)
+        commands = self.__packages(commands) # done here to capture virtual environment (if used)
         commands = self.__working_directory(commands)
         commands_str = '; '.join(commands)
         result = subprocess.run(commands_str, shell=True)
@@ -64,13 +64,11 @@ class TraceTarget:
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
     
-    def __requirements(self, commands: list[str]) -> list[str]:
+    def __packages(self, commands: list[str]) -> list[str]:
         wrapper = []
-        requirements_path = os.path.join(self.output_dir, f'{self.target_name}.requirements')
+        packages_path = os.path.join(self.output_dir, 'packages.pip')
         wrapper.extend(commands)
-        diff_requirements = f' --diff {self.requirements_path}' if self.requirements_path is not None else ''
-        wrapper.append(f'touch {requirements_path}')
-        wrapper.append(f'pipreqs --use-local --scan-notebooks{diff_requirements} --savepath {requirements_path} {self.repository_dir}')
+        wrapper.append(f'python3 {self.packages_path} {packages_path}')
         return wrapper
 
     def __working_directory(self, commands: list[str]) -> list[str]:
@@ -93,9 +91,13 @@ class TraceTarget:
         """Timestamp unnested executable lines and blocks in target script"""
         # Load the target script
         target_path = self.target_path if target_path is None else target_path
-        timestamp_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps')
         with open(target_path, 'r') as target_file:
             target = target_file.read().strip()
+
+        # Delete existing timestamp file
+        timestamp_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps')
+        if os.path.isfile(timestamp_path):
+            os.remove(timestamp_path)
 
         # Insert timestamps into target script
         BASH_LANGUAGE = Language(tsbash.language())

@@ -30,8 +30,7 @@ class Workflow:
         self.__checkout()
         self.__pip()
         self.__script()
-        self.__service()
-        self.__sort()
+        # self.__service()
         if dump:
             self.dump()
         return self.dumps()
@@ -124,11 +123,3 @@ class Workflow:
         """Retrieve multiline string that will be rendered properly"""
         newline_strings = '\n'.join(strings) + '\n'
         return LiteralScalarString(textwrap.dedent(f"""{newline_strings}"""))
-
-    def __sort(self):
-        """Sort keys in the workflow"""
-        # Load the workflow syntax order (if it exists)
-        if self.order_path is None:
-            return
-        with open(self.order_path, 'r') as file:
-            order = [line.lower().strip() for line in file.readlines() if not line.startswith('#')]
