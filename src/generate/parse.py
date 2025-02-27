@@ -76,8 +76,8 @@ class ParseTrace:
 
         # Identify requirements in a strace log
         with open(self.strace_path, 'r') as strace_file:
-            traced_requirements = set(re.findall(r'(?<=/site-packages/)(.+?)(?=/|"|>|\-\d)', entry) if 'site-packages' in entry else '' for entry in strace_file)
-            traced_requirements = {requirement.strip('_').removesuffix('.libs').lower() for requirement in traced_requirements if not requirement.endswith('.py')}
+            traced_requirements = set(re.search(r'(?<=/site-packages/)(.+?)(?=/|"|>|\-\d)', entry) if 'site-packages' in entry else None for entry in strace_file)
+            traced_requirements = {requirement.group().strip('_').removesuffix('.libs').lower() for requirement in traced_requirements if requirement is not None and not requirement.group().endswith('.py')}
             traced_requirements.remove('pycache') if 'pycache' in traced_requirements else None
             traced_requirements.remove('') if '' in traced_requirements else None
 
@@ -116,10 +116,10 @@ class ParseTrace:
             with open(self.env_filter_path, 'r') as log:
                 filter = [entry.strip() for entry in log if not entry.strip().startswith('#')]
 
-        # Eliminate duplicate or filtered candidate keys
+        # Eliminate filtered candidate keys
         used, env = [], []
         for candidate in candidates:
-            if candidate['key'] in used or candidate['key'] in filter:
+            if candidate['key'] in filter:
                 continue
             env.append(candidate)
             used.append(candidate['key'])

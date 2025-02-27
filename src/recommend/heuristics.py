@@ -237,7 +237,7 @@ class HeuristicRecommendations:
             recommendations[job_id] = []
             for start, end, _ in decision:
                 step = utils.to_multiline_str(run[start-1:end])
-                recommendations[job_id].append({'run': step})
+                recommendations[job_id].append({'run': step}) if step.strip() else None 
         return recommendations
 
     def __timeout_minutes(self, multiplier: int = 1.2, threshold: int = 10) -> dict:
