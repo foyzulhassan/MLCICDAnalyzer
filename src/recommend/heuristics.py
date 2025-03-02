@@ -1,11 +1,9 @@
-import json
 import copy
+import json
 import os
 from pathlib import Path
 import re
 
-from deepdiff import DeepDiff, Delta
-from deepdiff.serialization import json_dumps, json_loads
 import numpy as np
 from pymoo.decomposition.asf import ASF
 import recommend.utils as utils
@@ -39,11 +37,11 @@ class HeuristicRecommendations:
                 if recommendations[job_id]['env']:
                     workflow['jobs'][job_id]['env'] = recommendations[job_id]['env']
 
-                if recommendations[job_id]['needs']:
-                    workflow['jobs'][job_id]['needs'] = recommendations[job_id]['needs']
+                # if recommendations[job_id]['needs']:
+                #     workflow['jobs'][job_id]['needs'] = recommendations[job_id]['needs']
 
-                if recommendations[job_id]['outputs']:
-                    workflow['jobs'][job_id]['outputs'] = recommendations[job_id]['outputs']
+                # if recommendations[job_id]['outputs']:
+                #     workflow['jobs'][job_id]['outputs'] = recommendations[job_id]['outputs']
 
                 if recommendations[job_id]['steps']:
                     workflow['jobs'][job_id]['steps'].pop() # Remove large step which is the last in the implementation
@@ -75,17 +73,17 @@ class HeuristicRecommendations:
         for job_id in env:
             recommendations[job_id]['env'] = env[job_id]
 
-        needs, needs_env = self.__needs()
-        for job_id in needs:
-            recommendations[job_id]['needs'] = needs[job_id]
-            if recommendations[job_id]['env'] is not None:
-                recommendations[job_id]['env'].update(needs_env[job_id]) if needs_env[job_id] else None
-            else:
-                recommendations[job_id]['env'] = needs_env[job_id]
+        # needs, needs_env = self.__needs()
+        # for job_id in needs:
+        #     recommendations[job_id]['needs'] = needs[job_id]
+        #     if recommendations[job_id]['env'] is not None:
+        #         recommendations[job_id]['env'].update(needs_env[job_id]) if needs_env[job_id] else None
+        #     else:
+        #         recommendations[job_id]['env'] = needs_env[job_id]
 
-        outputs = self.__outputs()
-        for job_id in outputs:
-            recommendations[job_id]['outputs'] = outputs[job_id]
+        # outputs = self.__outputs()
+        # for job_id in outputs:
+        #     recommendations[job_id]['outputs'] = outputs[job_id]
 
         steps = self.__steps()
         for job_id in steps:
@@ -140,9 +138,7 @@ class HeuristicRecommendations:
         """Get environmental variables recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
-            candidates = {env['key']: env['value'] for env in self.job_parses[job_id]['env'] 
-                          if env['op'] == 'get' and '/' not in env['value'] and env['filename'].startswith(self.repository_dir)}
-            recommendations[job_id] = candidates if candidates else None
+            recommendations[job_id] = self.job_parses[job_id]['env'] if self.job_parses[job_id]['env'] else None
         return recommendations
 
     def __needs(self) -> tuple[dict, dict]:
@@ -302,7 +298,7 @@ class HeuristicRecommendations:
             # Identify common (parent) directory of paths (i.e. working directory)
             candidate_paths = [path.replace(f'{self.repository_dir}/', '') for path in paths if path in repository_paths]
             recommendations[job_id] = None
-            if candidate_paths:
+            if candidate_paths and len(paths) > 1:
                 working_directory = os.path.commonpath(candidate_paths)
                 recommendations[job_id] = f'./{working_directory}' if len(working_directory) > 0 else None
         return recommendations

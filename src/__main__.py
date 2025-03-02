@@ -25,9 +25,8 @@ def generate_base_workflow(job_parses: dict):
     workflow = Workflow(
         workflow_name=CONFIG.workflow_name, 
         output_dir=CONFIG.output_dir, 
-        job_parses=job_parses, 
-        requirements_path=CONFIG.requirements_path,
-        order_path=CONFIG.order_path)
+        job_parses=job_parses,
+        has_requirements=bool(CONFIG.requirements_path))
     workflow.construct(dump=True)
 
 
@@ -82,9 +81,19 @@ def parse_trace(target_path: str):
         target_path=target_path,
         output_dir=CONFIG.output_dir,
         requirements_path=CONFIG.requirements_path,
-        env_filter_path=CONFIG.env_filter_path,
-        docker_path=CONFIG.docker_path)
+        repository_dir=CONFIG.repository_dir,
+        filters_path=CONFIG.filters_path)
     return parse.parse(dump=True)
+
+
+def remove_artifacts(start_time: float):
+    paths = [os.path.join(CONFIG.output_dir, name) for name in os.listdir(CONFIG.output_dir) if os.path.isfile(os.path.join(CONFIG.output_dir, name))]
+    print('Deleting Artifacts...')
+    for path in paths:
+        if not path.endswith('.yaml') and os.path.getatime(path) >= start_time:
+            # Files that were accidently put in output dir are (likely) not automatically removed due to the access time check
+            os.remove(path)
+            print(path)
 
 
 def generate_config(destination_dir: str):
@@ -119,7 +128,7 @@ def parse_config(config_path: str, new_trace: bool = False):
     config_dict['new_trace'] = new_trace
     config_dict['patch_dir'] = res_dir
     config_dict['packages_path'] = os.path.join(res_dir, 'packages.py')
-    config_dict['env_filter_path'] = os.path.join(res_dir, 'env_filter.txt')
+    config_dict['filters_path'] = os.path.join(res_dir, 'filters.json')
     config_dict['schema_path'] = os.path.join(res_dir, 'github-workflow.json')
     config_dict['order_path'] = os.path.join(res_dir, 'syntax-order.txt')
     return Config(config_dict)
@@ -128,13 +137,12 @@ def parse_config(config_path: str, new_trace: bool = False):
 def parse_args():
     """Parse arguments from the command line"""
     parser = argparse.ArgumentParser(description="Trace an application, generate a workflow, and augment it with recommendations.")
-    parser.add_argument('-a', '--apply-recommendation', dest='apply_recommendation', action='store_true', help='whether to apply recommendation to current workflow')
     parser.add_argument('-c', '--config-path', dest='config_path', type=str, default=None, help='path to a configuration file')
-    parser.add_argument('-d', '--new-docker', dest='new_docker', type=str, default=None, help='path to directory to store a new docker log')
-    parser.add_argument('-i', '--interactive', action='store_true', help='whether to launch in interactive mode')
+    # parser.add_argument('-d', '--new-docker', dest='new_docker', type=str, default=None, help='path to directory to store a new docker log')
+    # parser.add_argument('-i', '--interactive', action='store_true', help='whether to launch in interactive mode')
+    parser.add_argument('-m', '--use-model', dest='use_model', action='store_true', default=None, help='whether to not prompt for model recommendations (even if an api key is supplied)')
     parser.add_argument('-n', '--new-config', dest='new_config', type=str, default=None, help='path to directory to generate a new config template')
     parser.add_argument('--new-trace', dest='new_trace', action='store_true', default=None, help='whether to override existing artifacts in the output directory and trace again')
-    parser.add_argument('--no-model', dest='no_model', action='store_true', default=None, help='whether to not prompt for model recommendations (even if an api key is supplied)')
     parser.add_argument('--no-artifacts', dest='no_artifacts', action='store_true', default=None, help='whether keep non-yaml artifacts that the tool produces')
     return parser.parse_args()
 
@@ -154,13 +162,13 @@ def main():
         return
     
     # Check whether to generate a new docker log
-    if args.new_docker is not None:
-        generate_docker(args.new_docker)
-        return
+    # if args.new_docker is not None:
+    #     generate_docker(args.new_docker)
+    #     return
 
     # Check whether to run in interactive mode
-    if args.interactive:
-        return
+    # if args.interactive:
+    #     return
 
     # Check whether a config file exists
     if args.config_path is None or not os.path.isfile(args.config_path):
@@ -173,22 +181,16 @@ def main():
     job_parses = get_job_parses()
     base_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.base.yaml')
     heuristic_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.heuristic.yaml')
-    # model_path = os.path.join(CONFIG.output_dir, f'{CONFIG.workflow_name}.model.yaml')
 
     # Generate workflows
     generate_base_workflow(job_parses)
     apply_heuristic_recommendations(workflow_path=base_path, job_parses=job_parses)
-    # if CONFIG.api_key and not args.no_model:
-    #     apply_model_recommendations(heuristic_path)
+    if CONFIG.api_key and args.use_model:
+        apply_model_recommendations(heuristic_path)
 
-    # Check whether to remove artifacts (besides yaml files and files accessed before the execution)
-    # if args.no_artifacts:
-    #     for dirpath, _, filenames in os.walk(CONFIG.output_dir):
-    #         for filename in filenames:
-    #             artifact_path = os.path.join(dirpath, filename)
-    #             if not filename.endswith('.yaml') and os.path.getatime(artifact_path) >= start_time:
-    #                 # Files that were accidently put in output dir are (likely) not automatically removed due to the access time check
-    #                 os.remove(artifact_path)
+    # Check whether to remove artifacts besides yaml files
+    if args.no_artifacts:
+        remove_artifacts(start_time)
 
 
 if __name__ == '__main__':

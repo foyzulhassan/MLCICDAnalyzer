@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src file: 'sha256-2YqGBA0wUIwMBcqd3+giXAZzIoYLh9oJ+iPs4VKJ2gA='; style-src 'unsafe-inline' file:; font-src file:" />
+    <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="./index.css" />
+    <script src="../node_modules/bootstrap/dist/js/bootstrap.min.js"></script>
+    <title>CI Configuration Generator</title>
+  </head>
+  <body>
+    <div class="container-fluid h-100 w-100">
+      <!-- Navigation Bar -->
+      <div class="row align-items-center bg-body-tertiary">
+        <button type="button" class="col-2 btn border-0 rounded-0 disabled" style="font-size: large;">CI Configuration Generator</button>
+        <button type="button" class="col-1 btn btn-light rounded-0 border-0" data-bs-toggle="modal" data-bs-target="#newStaticBackdrop">New</button>
+        <button type="button" class="col-1 btn btn-light rounded-0 border-0" data-bs-toggle="modal" data-bs-target="#loadStaticBackdrop">Load</button>
+      </div>
+
+      <!-- Recommendation Carousel -->
+      <div class="row align-items-center">
+        <div id="carousel-recommendations" class="carousel slide mt-3" data-interval="false">
+          <div class="carousel-inner w-75" style="text-align: center; margin: auto;"></div>
+          <button id="carousel-recommendations-prev" class="carousel-control-prev btn text-dark" type="button" data-bs-target="#carousel-recommendations" data-bs-slide="prev" style="font-size: xx-large;">&lt;&lt;&lt;</button>
+          <button id="carousel-recommendations-next" class="carousel-control-next btn text-dark" type="button" data-bs-target="#carousel-recommendations" data-bs-slide="next" style="font-size: xx-large;">&gt;&gt;&gt;</button>
+        </div>
+      </div>
+
+      <!-- YAML Diff Editor -->
+      <div class="row align-items-start" style="height: 80%;">
+        <div id="yaml-editor" class="col pt-3 h-100"></div>
+      </div>
+    </div>
+    
+    <!-- New Config Modal -->
+    <div class="modal fade" id="newStaticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+      <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="newStaticBackdropLabel">Generate a New CI Configuration</h1>
+          </div>
+
+          <div class="modal-body">
+            <!-- workflow_name -->
+            <div class="input-group mt-3">
+              <label class="input-group-text bg-white text-danger">*</label>
+              <span class="input-group-text" id="basic-addon1">workflow_name</span>
+              <input id="input-group-workflow_name-text" type="text" class="form-control" placeholder="">
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-workflow_name-description">v</button>
+            </div>
+
+            <div class="collapse" id="input-group-workflow_name-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div>
+
+            <!-- api_key -->
+            <div class="input-group mt-3">
+              <label class="input-group-text bg-white text-danger">*</label>
+              <span class="input-group-text" id="basic-addon1">api_key</span>
+              <input id="input-group-api_key-text" type="text" class="form-control" placeholder="">
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-api_key-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-api_key-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div><br>
+
+            <!-- target_paths -->
+            <div class="input-group">
+              <label class="input-group-text bg-white text-danger" for="input-group-target-file">*</label>
+              <label class="input-group-text" for="input-group-target-file">target_paths</label>
+              <input type="file" class="form-control" id="input-group-target_paths" accept=".sh" multiple>
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-target_paths-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-target_paths-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div><br>
+
+            <!-- working_dir -->
+            <div class="input-group">
+              <label class="input-group-text bg-white text-danger" for="input-group-target-file">*</label>
+              <label class="input-group-text" for="input-group-target-file">working_dir</label>
+              <input type="file" class="form-control" id="input-group-working_dir" webkitdirectory>
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-working_dir-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-working_dir-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div><br>
+
+            <!-- repository_dir -->
+            <div class="input-group">
+              <label class="input-group-text bg-white text-danger" for="input-group-target-file">*</label>
+              <label class="input-group-text" for="input-group-target-file">repository_dir</label>
+              <input type="file" class="form-control" id="input-group-repository_dir" webkitdirectory>
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-repository_dir-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-repository_dir-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div><br>
+
+            <!-- requirements_path -->
+            <div class="input-group">
+              <label class="input-group-text bg-white text-danger" for="input-group-target-file">&nbsp;</label>
+              <label class="input-group-text" for="input-group-target-file">requirements_path</label>
+              <input type="file" class="form-control" id="input-group-requirements_path" accept=".txt">
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-requirements_path-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-requirements_path-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div><br>
+
+            <!-- docker_path -->
+            <div class="input-group">
+              <label class="input-group-text bg-white text-danger" for="input-group-docker_path-file">*</label>
+              <label class="input-group-text" for="input-group-docker_path-file">docker_path</label>
+              <input type="file" class="form-control" id="input-group-docker_path" accept=".docker">
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-docker_path-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-docker_path-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div>
+
+            <!-- new_trace -->
+            <div class="form-check form-switch mt-3">
+              <input id="input-group-new_trace-switch" class="form-check-input" type="checkbox" role="switch" checked>
+              <label class="form-check-label" for="input-group-new_trace-switch">New Trace</label>
+            </div>
+            
+            <!-- keep_output -->
+            <div class="form-check form-switch mt-3">
+              <input id="input-group-keep_output-switch" class="form-check-input" type="checkbox" role="switch" checked>
+              <label class="form-check-label" for="input-group-keep_output-switch">Keep Outputs</label>
+            </div>
+
+            <!-- Advanced Options -->
+            <div class="form-check form-switch mt-3">
+              <input id="input-group-advanced-switch" class="form-check-input" type="checkbox" role="switch" data-bs-toggle="collapse" data-bs-target="#input-group-advanced-text">
+              <label class="form-check-label" for="input-group-advanced-switch">Advanced Options</label>
+            </div>
+            <div class="collapse" id="input-group-advanced-text">
+              <!-- patch_dir -->
+              <div class="input-group">
+                <label class="input-group-text bg-white text-danger" for="input-group-patch_dir-file">*</label>
+                <label class="input-group-text" for="input-group-patch_dir-file">patch_dir</label>
+                <input type="file" class="form-control" id="input-group-patch_dir" webkitdirectory>
+                <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-patch_dir-description">v</button>
+              </div>
+              <div class="collapse" id="input-group-patch_dir-description">
+                <div class="card card-body">
+                  PLACEHOLDER
+                </div>
+              </div><br>
+              
+              <!-- packages_path -->
+              <div class="input-group">
+                <label class="input-group-text bg-white text-danger" for="input-group-packages_path-file">*</label>
+                <label class="input-group-text" for="input-group-packages_path-file">packages_path</label>
+                <input type="file" class="form-control" id="input-group-packages_path" accept=".py">
+                <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-packages_path-description">v</button>
+              </div>
+              <div class="collapse" id="input-group-packages_path-description">
+                <div class="card card-body">
+                  PLACEHOLDER
+                </div>
+              </div><br>
+
+              <!-- env_filter_path -->
+              <div class="input-group">
+                <label class="input-group-text bg-white text-danger" for="input-group-env_filter_path-file">&nbsp;</label>
+                <label class="input-group-text" for="input-group-env_filter_path-file">env_filter_path</label>
+                <input type="file" class="form-control" id="input-group-env_filter_path" accept=".txt">
+                <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-env_filter_path-description">v</button>
+              </div>
+              <div class="collapse" id="input-group-env_filter_path-description">
+                <div class="card card-body">
+                  PLACEHOLDER
+                </div>
+              </div><br>
+
+              <!-- schema_path -->
+              <div class="input-group">
+                <label class="input-group-text bg-white text-danger" for="input-group-schema_path-file">*</label>
+                <label class="input-group-text" for="input-group-schema_path-file">schema_path</label>
+                <input type="file" class="form-control" id="input-group-schema_path" accept=".json">
+                <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-schema_path-description">v</button>
+              </div>
+              <div class="collapse" id="input-group-schema_path-description">
+                <div class="card card-body">
+                  PLACEHOLDER
+                </div>
+              </div><br>
+            </div>
+          </div>
+          
+          <div class="modal-footer">
+            <span id="new-status-text" class="text-danger"></span>
+            <button id="new-close-btn" type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button id="new-yaml-btn" type="button" class="btn btn-primary">Generate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  
+    <!-- Load Config Modal -->
+    <div class="modal fade" id="loadStaticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+      <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="loadStaticBackdropLabel">Load Existing CI Configuration</h1>
+          </div>
+          <div class="modal-body">
+            <!-- load_workflow -->
+            <div class="input-group">
+              <label class="input-group-text bg-white text-danger" for="input-group-load_workflow-file">*</label>
+              <label class="input-group-text" for="input-group-load_workflow-file">Workflow</label>
+              <input id="input-group-load_workflow-file" type="file" class="form-control" id="input-group-load_workflow-file" accept=".yml,.yaml">
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-load_workflow-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-load_workflow-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div><br/>
+            
+            <!-- artifact_dir -->
+            <div class="input-group">
+              <label class="input-group-text bg-white text-danger" for="input-group-artifact_dir">*</label>
+              <label class="input-group-text" for="input-group-artifact_dir">Artifact Directory</label>
+              <input type="file" class="form-control" id="input-load_artifact-dir" webkitdirectory>
+              <button class="btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#input-group-artifact_dir-description">v</button>
+            </div>
+            <div class="collapse" id="input-group-artifact_dir-description">
+              <div class="card card-body">
+                PLACEHOLDER
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <span id="input-group-load_status-text" class="text-danger"></span>
+            <button id="load-close-btn" type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button id="load-yaml-btn" type="button" class="btn btn-primary">Load</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script src="../node_modules/monaco-editor/min/vs/loader.js"></script>
+  <script src="../src/renderer.js"></script>
+</html>

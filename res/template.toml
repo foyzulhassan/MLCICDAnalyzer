@@ -17,18 +17,17 @@ repository_dir = ""
 # absolute path to a pip requirements file
 requirements_path = ""
 
+# absolute path to a directory to run targets in
+working_dir = ""
+
 # ========================================================================== #
-#                                 Optional                                   #
+#                                 OPTIONAL                                   #
 # ========================================================================== #
 
 # OpenAI API key for LLM interaction
 # - Missing: Model recommendations will be unavailable
 api_key = ""
 
-# absolute path to a directory to run targets in
-# - Missing: Repository directory will be the working directory
-working_dir = ""
-
 # absolute path to a log listing the docker containers on the machine (generated with this tool)
 # - Missing: Service-based recommendations will not be provided
-docker_path = ""
+# docker_path = ""

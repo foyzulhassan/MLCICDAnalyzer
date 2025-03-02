@@ -12,50 +12,32 @@ class Workflow:
                  workflow_name: str,
                  output_dir: str,
                  job_parses: dict,
-                 requirements_path: str = None,
-                 order_path: str = None):
+                 has_requirements: bool = True):
         self.workflow_name = workflow_name.split('.')[0]
         self.output_dir = output_dir
         self.job_parses = job_parses
-        self.job_ids = list(job_parses.keys())
-        self.requirements_path = requirements_path
-        self.order_path = order_path
-        self.yaml = {'name': self.workflow_name, 'on': 'push', 'jobs': {job_id: {} for job_id in self.job_ids}}
-        self.yaml_parser = self.__yaml_parser()
+        self.has_requirements = has_requirements
 
+        self.job_ids = list(job_parses.keys())
+        self.yaml_parser = self.__yaml_parser()
+        self.workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.base.yaml')
+        self.yaml = {'name': self.workflow_name, 'on': 'push', 'jobs': {job_id: {} for job_id in self.job_ids}}
+        
     def construct(self, dump: bool = False) -> str:
         """Contrust the workflow using parsed information from traces"""
         self.__runner()
         self.__matrix()
         self.__checkout()
-        self.__pip()
+        self.__packages()
         self.__script()
         # self.__service()
         if dump:
             self.dump()
         return self.dumps()
 
-    def dump(self):
-        """Dump the workflow, as it has been built, to a file"""
-        workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.base.yaml')
-        with open(workflow_path, 'w') as workflow_file:
-            self.yaml_parser.dump(data=self.yaml, stream=workflow_file)
-    
-    def dumps(self) -> str:
-        """Dump the workflow, as it has been built, to a string"""
-        workflow_stream = StringIO()
-        self.yaml_parser.dump(self.yaml, workflow_stream)
-        workflow_str = workflow_stream.getvalue()
-        workflow_stream.close()
-        return workflow_str
-        
-    def __str__(self) -> str:
-        """Get string representation of the workflow"""
-        workflow_stream = StringIO()
-        self.yaml_parser.dump(self.yaml, workflow_stream)
-        workflow_str = workflow_stream.getvalue()
-        workflow_stream.close()
-        return workflow_str
+    # ======================================================================= #
+    #                                    STEPS                                #
+    # ======================================================================= #
 
     def __runner(self):
         """Specify the virtual machine that will be used to run the application"""
@@ -76,22 +58,25 @@ class Workflow:
             job = self.yaml['jobs'][job_id]
             job.update({'steps': [{'uses': 'actions/checkout@v4'}]})
     
-    def __pip(self):
+    def __packages(self):
         """Add python dependency installation to job configurations"""
         for job_id in self.job_ids:
             commands = []
             steps = self.yaml['jobs'][job_id]['steps']
-            requirements = self.job_parses[job_id]['requirements']
-
             steps.append({'uses': 'actions/setup-python@v5', 'with': {'python-version': '${{ matrix.python-version }}', 'cache': 'pip'}})
-            commands.append('python -m pip install --upgrade pip wheel setuptools')
-            if self.requirements_path is not None:
+
+            if self.job_parses[job_id]['apt']:
+                apt_str = ' '.join(self.job_parses[job_id]['apt'])
+                commands.append(f'apt install -y {apt_str}')
+
+            commands.append('python3 -m pip install --upgrade pip wheel setuptools')
+            if self.has_requirements:
                 commands.append('if [ -f requirements.txt ]; then pip install -r requirements.txt; fi')
-            if self.job_parses[job_id]['requirements']:
-                requirements_str = ' '.join([f'{module}=={version}' if version is not None else f'{module}' for module, version in requirements.items()])
-                commands.append(f'pip install -I {requirements_str}')
+            if self.job_parses[job_id]['pip']:
+                pip_str = ' '.join(f'{module}=={version}' if version is not None else f'{module}' for module, version in self.job_parses[job_id]['pip'].items())
+                commands.append(f'pip install -I {pip_str}')
             if commands:
-                steps.append({'name': 'Install Python Dependencies', 'run': self.__multiline(commands)})
+                steps.append({'name': 'Install Dependencies', 'run': self.__multiline(commands)})
 
     def __script(self):
         """Add target script commands (without comments) to a job"""
@@ -108,6 +93,36 @@ class Workflow:
             if services:
                 job.update({'services': {service['name']: {'image': service['image'], 'ports': service['ports']} for service in services}})
 
+    # ======================================================================= #
+    #                                   UTILITY                               #
+    # ======================================================================= #
+
+    def dump(self):
+        """Dump the workflow, as it has been built, to a file"""
+        with open(self.workflow_path, 'w') as file:
+            self.yaml_parser.dump(data=self.yaml, stream=file)
+    
+    def dumps(self) -> str:
+        """Dump the workflow, as it has been built, to a string"""
+        workflow_stream = StringIO()
+        self.yaml_parser.dump(self.yaml, workflow_stream)
+        workflow_str = workflow_stream.getvalue()
+        workflow_stream.close()
+        return workflow_str
+
+    def __multiline(self, strings: list[str]) -> str:
+        """Retrieve multiline string that will be rendered properly"""
+        newline_strings = '\n'.join(strings) + '\n'
+        return LiteralScalarString(textwrap.dedent(f"""{newline_strings}"""))
+
+    def __str__(self) -> str:
+        """Get string representation of the workflow"""
+        workflow_stream = StringIO()
+        self.yaml_parser.dump(self.yaml, workflow_stream)
+        workflow_str = workflow_stream.getvalue()
+        workflow_stream.close()
+        return workflow_str
+
     def __yaml_parser(self) -> YAML:
         """Get pre-configured yaml parser"""
         ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
@@ -118,8 +133,3 @@ class Workflow:
         yaml_parser.width = 100
         yaml_parser.ignore_aliases = lambda *args : True
         return yaml_parser
-    
-    def __multiline(self, strings: list[str]) -> str:
-        """Retrieve multiline string that will be rendered properly"""
-        newline_strings = '\n'.join(strings) + '\n'
-        return LiteralScalarString(textwrap.dedent(f"""{newline_strings}"""))

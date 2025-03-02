@@ -2,8 +2,8 @@ import os
 from pathlib import Path
 import subprocess
 
-import tree_sitter_bash as tsbash
 from tree_sitter import Language, Parser
+import tree_sitter_bash
 
 
 class TraceTarget:
@@ -11,67 +11,68 @@ class TraceTarget:
                  target_path: str, 
                  output_dir: str,
                  repository_dir: str,
-                 working_dir: str = None,
-                 packages_path: str = None,
-                 patch_dir: str = None,
-                 new_trace: bool = False):
+                 working_dir: str,
+                 packages_path: str,
+                 patch_dir: str,
+                 new_trace: bool):
         self.target_path = target_path
-        self.target_name = Path(self.target_path).stem.split('.')[0]
         self.output_dir = output_dir
-        self.working_dir = working_dir if working_dir else repository_dir
         self.repository_dir = repository_dir
+        self.working_dir = working_dir
         self.packages_path = packages_path
         self.patch_dir = patch_dir
         self.new_trace = new_trace
+
+        self.target_name = Path(self.target_path).stem.split('.')[0]
+        self.timestamps_target_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps.sh')
+        self.timestamps_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps')
+        self.strace_path = os.path.join(self.output_dir, f'{self.target_name}.strace')
+        self.ltrace_path = os.path.join(self.output_dir, f'{self.target_name}.ltrace')
+        self.pip_packages_path = os.path.join(self.output_dir, 'packages.pip.json')
+        self.apt_packages_path = os.path.join(self.output_dir, 'packages.apt.json')
+        self.pyenv_path = os.path.join(self.output_dir, f'{self.target_name}.pyenv')
         os.makedirs(self.output_dir, exist_ok=True)
 
     def trace(self):
-        """Trace a (instrumented) target script with strace and ltrace"""
-        timestamped_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps.sh')
-        timestamps_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps')
-        strace_path = os.path.join(self.output_dir, f'{self.target_name}.strace')
-        ltrace_path = os.path.join(self.output_dir, f'{self.target_name}.ltrace')
-        if self.new_trace or not os.path.isfile(timestamps_path):
+        """Instrument and trace a target script with strace and ltrace"""
+        if self.new_trace or not os.path.isfile(self.timestamps_path):
             self.__timestamp(dump=True)
-        if self.new_trace or not os.path.isfile(strace_path):
-            self.strace(timestamped_path) # get timestamps while tracing
-        if self.new_trace or not os.path.isfile(ltrace_path):
-            self.ltrace(self.target_path)
+        if self.new_trace or not os.path.isfile(self.strace_path):
+            self.__strace(self.timestamps_target_path)
+        if self.new_trace or not os.path.isfile(self.ltrace_path):
+            self.__ltrace(self.target_path)
+        if self.new_trace or not os.path.isfile(self.apt_packages_path):
+            self.__apt_packages()
 
-    def strace(self, target_path: str = None) -> int:
-        """Execute and trace a (instrumented) target script with strace"""
-        if target_path is None:
-            target_path = self.target_path
-        strace_path = os.path.join(self.output_dir, f'{self.target_name}.strace')
-        commands = [f'strace --follow-forks --decode-fds=path --trace=%file,%network --quiet=all --successful-only --absolute-timestamps=format:unix,precision:us --output={strace_path} bash {target_path}']
-        commands = self.__packages(commands) # done here to capture virtual environment (if used)
+    def __strace(self, target_path: str = None) -> int:
+        """Execute and trace an instrumented target script with strace"""
+        target_path = self.target_path if target_path is None else target_path
+        commands = [f'strace -f -o {self.strace_path} -qqq -ttt -z --decode-fds=path --trace=open,stat bash {target_path}']
+        commands = self.__pip_packages(commands) # ran here to capture virtual environments
         commands = self.__working_directory(commands)
         commands_str = '; '.join(commands)
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
 
-    def ltrace(self, target_path: str = None) -> int:
-        """Execute and trace a (instrumented) target script with ltrace"""
-        if target_path is None:
-            target_path = self.target_path
-        commands = []
-        ltrace_path = os.path.join(self.output_dir, f'{self.target_name}.ltrace')
-        commands.append(f'ltrace -fbTC -tt -e *env -o {ltrace_path} bash {target_path}')
-        if self.patch_dir is not None:
-            commands = self.__python_env(commands)
+    def __ltrace(self, target_path: str = None) -> int:
+        """Execute and trace an instrumented target script with ltrace"""
+        target_path = self.target_path if target_path is None else target_path
+        commands = [f"ltrace -A 9999 -b -C -e 'getenv' -f -o {self.ltrace_path} -s 9999 -ttt bash {target_path}"]
+        commands = self.__python_env(commands)
         commands = self.__working_directory(commands)
         commands_str = '; '.join(commands)
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
     
-    def __packages(self, commands: list[str]) -> list[str]:
+    def __pip_packages(self, commands: list[str]) -> list[str]:
+        """Add commands to get the installed pip packages in the target environment"""
         wrapper = []
-        packages_path = os.path.join(self.output_dir, 'packages.pip')
         wrapper.extend(commands)
-        wrapper.append(f'python3 {self.packages_path} {packages_path}')
+        wrapper.append(f'python3 {self.packages_path} pip {self.pip_packages_path}')
         return wrapper
 
     def __working_directory(self, commands: list[str]) -> list[str]:
+        """Add commands to return to the tool environment after tracing the target"""
         wrapper = []
         wrapper.append('PREVIOUS_WORKING_DIRECTORY=$PWD')
         wrapper.append(f'cd {self.working_dir}')
@@ -80,44 +81,48 @@ class TraceTarget:
         return wrapper
 
     def __python_env(self, commands: list[str]) -> list[str]:
+        """Add commands to get the environment variable accesses in python scripts"""
         wrapper = []
-        pyenv_path = os.path.join(self.output_dir, f'{self.target_name}.pyenv')
-        wrapper.append(f'export ENV_TRACE={pyenv_path}')
-        wrapper.append(f'export PYTHONPATH={self.patch_dir}')
+        wrapper.append(f'export PYENV_OUTPUT_PATH={self.pyenv_path}')
+        wrapper.append(f'export PYENV_REPOSITORY_DIR={self.repository_dir}')
+        wrapper.append(f'export PYTHONPATH={self.patch_dir}') # executes sitecustomize which instruments the target
         wrapper.extend(commands)
         return wrapper
+
+    def __apt_packages(self) -> int:
+        """Add commands to get the installed apt packages in the target environment"""
+        result = subprocess.run(f'python3 {self.packages_path} apt {self.apt_packages_path}', shell=True)
+        return result.returncode
 
     def __timestamp(self, target_path: str = None, dump: bool = False) -> str:
         """Timestamp unnested executable lines and blocks in target script"""
         # Load the target script
         target_path = self.target_path if target_path is None else target_path
-        with open(target_path, 'r') as target_file:
-            target = target_file.read().strip()
+        with open(target_path, 'r') as file:
+            target = file.read().strip()
 
-        # Delete existing timestamp file
-        timestamp_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps')
-        if os.path.isfile(timestamp_path):
-            os.remove(timestamp_path)
+        # Delete any existing timestamp log
+        if os.path.isfile(self.timestamps_path):
+            os.remove(self.timestamps_path)
 
-        # Insert timestamps into target script
-        BASH_LANGUAGE = Language(tsbash.language())
-        parser = Parser(BASH_LANGUAGE)
-        tree = parser.parse(target.encode())
+        # Insert timestamp monitoring code between shallow nodes (i.e. depth 1) in the target
+        parser = Parser(Language(tree_sitter_bash.language()))
+        shallow_nodes = parser.parse(target.encode()).root_node.children
         lines = ['STARTING_EPOCH_TIME=$(date +%s)', 'PREVIOUS_TIME=0']
         line_num = 0
-        for child in tree.root_node.children:
-            if child.type == 'comment':
+        for node in shallow_nodes:
+            if node.type == 'comment':
                 continue
-            line_height = child.text.decode().count('\n')+1
-            lines.append(f'{child.text.decode()}')
-            lines.append(f'printf "%d,%d,%d\\n" {line_num} {line_num + line_height} $(($(date +%s) - $STARTING_EPOCH_TIME - $PREVIOUS_TIME)) >> {timestamp_path}')
+            text = node.text.decode()
+            line_height = text.count('\n')+1
+            lines.append(f'{text}')
+            lines.append(f'printf "%d,%d,%d\\n" {line_num} {line_num + line_height} $(($(date +%s) - $STARTING_EPOCH_TIME - $PREVIOUS_TIME)) >> {self.timestamps_path}')
             lines.append('PREVIOUS_TIME=$(($(date +%s) - $STARTING_EPOCH_TIME))')
             line_num = line_num + line_height
         timestamp_target = '\n'.join(lines).strip()
 
-        # Dump timestamped target script
+        # Dump the target with timestamp monitoring code
         if dump:
-            timestamp_path = os.path.join(self.output_dir, f'{self.target_name}.timestamps.sh')
-            with open(timestamp_path, 'w') as file:
+            with open(self.timestamps_target_path, 'w') as file:
                 file.write(timestamp_target)
         return timestamp_target

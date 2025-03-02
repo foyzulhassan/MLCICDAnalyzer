@@ -3,8 +3,6 @@ import json
 import os
 from pathlib import Path
 
-from deepdiff import DeepDiff, Delta
-from deepdiff.serialization import json_dumps, json_loads
 from openai import OpenAI
 import recommend.utils as utils
 
@@ -33,22 +31,9 @@ class ModelRecommendations():
         self.model = model
         self.client = OpenAI(api_key=self.api_key)
 
-    def apply(self, id: int = None, dump: bool = False) -> dict:
+    def apply(self, dump: bool = False) -> dict:
         """Apply one or all recommendations to a workflow"""
-        workflow = copy.deepcopy(self.workflow)
-        model_path = os.path.join(self.output_dir, f'{self.workflow_name}.model.recommendations')
-        if os.path.isfile(model_path):
-            delta = Delta(delta_path=model_path, deserializer=json_loads)
-            edit_actions = self.__parse_recommendations(delta)
-            if id is not None:
-                workflow += Delta(edit_actions[id], serializer=json_dumps, always_include_values=True)
-            else:
-                for action in edit_actions:
-                    workflow += Delta(action, serializer=json_dumps, always_include_values=True)
-            if dump:
-                workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.model.yaml')
-                utils.dump_workflow(workflow, workflow_path)
-        return workflow
+        pass
     
     def recommendations(self, dump: bool = False) -> list:
         """Get all recommendations for a workflow"""
@@ -58,20 +43,7 @@ class ModelRecommendations():
             .replace('```', '') \
             .removeprefix('yaml') \
             .strip()
-
-        # Find the differences between the old and new workflows
-        if utils.validate_workflow(improved_workflow, self.schema):
-            improved_workflow = utils.workflow_to_dict(improved_workflow)
-            diff = DeepDiff(self.workflow, improved_workflow)
-            delta = Delta(diff, serializer=json_dumps, always_include_values=True)
-            recommendations = delta.to_dict()
-
-        # Dump edit actions to a file
-        if dump:
-            model_path = os.path.join(self.output_dir, f'{self.workflow_name}.model.recommendations')
-            with open(model_path, 'w') as file:
-                delta.dump(file) if recommendations != {} else json.dump(recommendations)         
-        return recommendations
+        pass
 
     def __prompt(self) -> str:
         """Send messages to the model and receive a response"""
@@ -84,13 +56,9 @@ class ModelRecommendations():
         )
         return response.choices[0].message.content
     
-    def __parse_recommendations(self, delta: Delta) -> list:
+    def __parse_recommendations(self) -> list:
         """Parse individual requirements from Delta"""
-        edit_actions = []
-        for group, actions in delta.to_dict().items():
-            for name, action in actions.items():
-                edit_actions.append({group: {name: action}})
-        return edit_actions
+        pass
 
     def __messages(self) -> list:
         """Get the messages that will be sent to the model"""
@@ -130,12 +98,3 @@ class ModelRecommendations():
                 '- Do not explain the changes that were made.'
             )
         }
-
-    def __knowledge(self) -> str:
-        knowledge = []
-        for job_id in self.workflow['jobs']:
-            instruction_path = os.path.join(self.output_dir, f'{job_id}.knowledge')
-            with open(instruction_path, 'r') as file:
-                knowledge += file.readlines()
-        knowledge_str = '\n'.join([f'- {fact}' for fact in knowledge]).strip()
-        return knowledge_str
