@@ -1,48 +1,63 @@
 import argparse
-import glob
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import time
 
-# Import vendored libraries before the modules that depend on them
-TOOL_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-MODULES_DIR = glob.glob(os.path.join(TOOL_DIR, '.modules/lib/python*/site-packages'))
-sys.path.extend(MODULES_DIR)
+import toml
 
 from generate.trace import TraceTarget
 from generate.parse import ParseTrace
 from generate.workflow import Workflow
 from recommend.heuristics import HeuristicRecommendations
 from recommend.model import ModelRecommendations
-import toml
+
+
+TOOL_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+RES_DIR = os.path.join(TOOL_DIR, 'res')
+TIMELOG = {
+    'tool': -1,
+    'base': -1,
+    'heuristic': -1,
+    'model': -1,
+    'jobs': {}
+}
 
 
 def generate_base_workflow(job_parses: dict):
     """Generate a workflow from the target traces"""
+    TIMELOG['base'] = -time.time()
     workflow = Workflow(
         workflow_name=CONFIG.workflow_name, 
         output_dir=CONFIG.output_dir, 
         job_parses=job_parses,
         has_requirements=bool(CONFIG.requirements_path))
     workflow.construct(dump=True)
+    TIMELOG['base'] = round(time.time() + TIMELOG['base'])
 
 
 def apply_heuristic_recommendations(workflow_path: str, job_parses: dict):
     """Apply heuristic recommendations to workflow"""
+    TIMELOG['heuristic'] = -time.time()
     heuristic = HeuristicRecommendations(
         workflow_path=workflow_path,
         output_dir=CONFIG.output_dir,
         repository_dir=CONFIG.repository_dir,
-        job_parses=job_parses)
+        job_parses=job_parses,
+        concurrency_threshold=CONFIG.concurrency_threshold,
+        step_mcdm_weights=CONFIG.step_mcdm_weights,
+        timeout_multiplier=CONFIG.timeout_multiplier,
+        timeout_threshold=CONFIG.timeout_threshold)
     heuristic.recommendations(dump=True)
     heuristic.apply(dump=True)
+    TIMELOG['heuristic'] = round(time.time() + TIMELOG['heuristic'])
 
 
 def apply_model_recommendations(workflow_path: str):
     """Apply model recommendations to workflow"""
+    TIMELOG['model'] = -time.time()
     model = ModelRecommendations(
         workflow_path=workflow_path,
         output_dir=CONFIG.output_dir,
@@ -50,6 +65,7 @@ def apply_model_recommendations(workflow_path: str):
         api_key=CONFIG.api_key)
     model.recommendations(dump=True)
     model.apply(dump=True)
+    TIMELOG['model'] = round(time.time() + TIMELOG['model'])
 
 
 def get_job_parses() -> dict:
@@ -57,6 +73,7 @@ def get_job_parses() -> dict:
     job_parses = {}
     for target_path in CONFIG.target_paths:
         target_name = Path(target_path).stem
+        TIMELOG['jobs'][target_name] = {}
         trace_target(target_path)
         job_parses[target_name] = parse_trace(target_path)
     return job_parses
@@ -77,16 +94,21 @@ def trace_target(target_path: str):
 
 def parse_trace(target_path: str):
     """Parse relevant information from a trace script trace"""
+    target_name = Path(target_path).stem
+    TIMELOG['jobs'][target_name]['parse'] = -time.time()
     parse = ParseTrace(
         target_path=target_path,
         output_dir=CONFIG.output_dir,
         requirements_path=CONFIG.requirements_path,
         repository_dir=CONFIG.repository_dir,
         filters_path=CONFIG.filters_path)
-    return parse.parse(dump=True)
+    parse = parse.parse(dump=True)
+    TIMELOG['jobs'][target_name]['parse'] = round(time.time() + TIMELOG['jobs'][target_name]['parse'])
+    return parse
 
 
 def remove_artifacts(start_time: float):
+    """Delete artifacts that were created by the tool"""
     paths = [os.path.join(CONFIG.output_dir, name) for name in os.listdir(CONFIG.output_dir) if os.path.isfile(os.path.join(CONFIG.output_dir, name))]
     print('Deleting Artifacts...')
     for path in paths:
@@ -94,6 +116,22 @@ def remove_artifacts(start_time: float):
             # Files that were accidently put in output dir are (likely) not automatically removed due to the access time check
             os.remove(path)
             print(path)
+
+
+def dump_timelog():
+    """Dump timelog to a file"""
+    for job_id in TIMELOG['jobs']:
+        for tracer in ['strace', 'ltrace']:
+            tracer_path = os.path.join(CONFIG.output_dir, f'{job_id}.{tracer}')
+            with open(tracer_path, 'r', errors='ignore') as file:
+                start = float(file.readline().split(maxsplit=2)[1])
+                for line in file:
+                    pass
+                end = float(line.split(maxsplit=2)[1])
+            TIMELOG['jobs'][job_id][tracer] = round(end - start)
+    log_path = os.path.join(CONFIG.output_dir, 'timelog.json')
+    with open(log_path, 'w') as file:
+        json.dump(TIMELOG, file, indent=2)
 
 
 def generate_config(destination_dir: str):
@@ -123,53 +161,37 @@ def parse_config(config_path: str, new_trace: bool = False):
         __getattr__ = dict.get
         __setattr__ = dict.__setitem__
         __delattr__ = dict.__delitem__
-    res_dir = os.path.join(TOOL_DIR, 'res')
     config_dict = toml.load(config_path)
     config_dict['new_trace'] = new_trace
-    config_dict['patch_dir'] = res_dir
-    config_dict['packages_path'] = os.path.join(res_dir, 'packages.py')
-    config_dict['filters_path'] = os.path.join(res_dir, 'filters.json')
-    config_dict['schema_path'] = os.path.join(res_dir, 'github-workflow.json')
-    config_dict['order_path'] = os.path.join(res_dir, 'syntax-order.txt')
+    config_dict['patch_dir'] = RES_DIR
+    config_dict['packages_path'] = os.path.join(RES_DIR, 'packages.py')
+    config_dict['filters_path'] = os.path.join(RES_DIR, 'filters.json')
+    config_dict['schema_path'] = os.path.join(RES_DIR, 'github-workflow.json')
+    config_dict['order_path'] = os.path.join(RES_DIR, 'syntax-order.txt')
     return Config(config_dict)
 
 
 def parse_args():
     """Parse arguments from the command line"""
-    parser = argparse.ArgumentParser(description="Trace an application, generate a workflow, and augment it with recommendations.")
-    parser.add_argument('-c', '--config-path', dest='config_path', type=str, default=None, help='path to a configuration file')
-    # parser.add_argument('-d', '--new-docker', dest='new_docker', type=str, default=None, help='path to directory to store a new docker log')
-    # parser.add_argument('-i', '--interactive', action='store_true', help='whether to launch in interactive mode')
-    parser.add_argument('-m', '--use-model', dest='use_model', action='store_true', default=None, help='whether to not prompt for model recommendations (even if an api key is supplied)')
-    parser.add_argument('-n', '--new-config', dest='new_config', type=str, default=None, help='path to directory to generate a new config template')
-    parser.add_argument('--new-trace', dest='new_trace', action='store_true', default=None, help='whether to override existing artifacts in the output directory and trace again')
+    parser = argparse.ArgumentParser(description="Synthesize GitHub Actions Workflows via Runtime-based Analysis.")
+    parser.add_argument('config_path', type=str, default=None, help='path to a configuration file')
+    parser.add_argument('-m', '--use-model', dest='use_model', action='store_true', default=None, help='whether to use LLM recommendations')
+    parser.add_argument('-n', '--new-trace', dest='new_trace', action='store_true', default=None, help='whether to trace the target again and override existing artifacts')
+    parser.add_argument('--new-config', dest='new_config', type=str, default=None, help='path to directory to generate a new configuration file template')
     parser.add_argument('--no-artifacts', dest='no_artifacts', action='store_true', default=None, help='whether keep non-yaml artifacts that the tool produces')
     return parser.parse_args()
 
 
 def main():
+    TIMELOG['tool'] = -time.time()
     args = parse_args()
     start_time = time.time()
-
-    # Check whether dependencies have been installed
-    if not os.path.isdir(os.path.join(TOOL_DIR, '.modules')):
-        print('DependenciesNotFound: Execute this tool with the --install option to install dependencies before running')
-        return
     
     # Check whether to generate a new config file
     if args.new_config is not None:
         generate_config(args.new_config)
         return
     
-    # Check whether to generate a new docker log
-    # if args.new_docker is not None:
-    #     generate_docker(args.new_docker)
-    #     return
-
-    # Check whether to run in interactive mode
-    # if args.interactive:
-    #     return
-
     # Check whether a config file exists
     if args.config_path is None or not os.path.isfile(args.config_path):
         print(f'FileNotFound: No config file at "{args.config_path}"')
@@ -191,6 +213,10 @@ def main():
     # Check whether to remove artifacts besides yaml files
     if args.no_artifacts:
         remove_artifacts(start_time)
+    
+    # Dump logs to a file
+    TIMELOG['tool'] = round(time.time() + TIMELOG['tool'])
+    dump_timelog()
 
 
 if __name__ == '__main__':

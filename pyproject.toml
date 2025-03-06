@@ -4,61 +4,50 @@ build-backend = "hatchling.build"
 
 [project]
 name = "MLCICDAnalyzer"
-dynamic = ["version"]
-description = ''
+version = "1.0.0"
+description = "Synthesize GitHub Actions Workflows via Runtime-based Analysis"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = ""
-keywords = []
+keywords = [
+  "github actions",
+  "code generation",
+  "runtime analysis",
+]
 authors = [
-  { name = "Javid Ditty", email = "jditty@umich.edu",
-    name = "Rahul Ghanshyam Chavan", email = "rchavan@umich.edu",
-    name = "Foyzul Hassan", email = "foyzul@umich.edu"
-  },
+  { name = "Javid Ditty", email = "jditty@umich.edu" },
+  { name = "Rahul Ghanshyam Chavan", email = "rchavan@umich.edu" },
+  { name = "Foyzul Hassan", email = "foyzul@umich.edu" },
+]
+maintainers = [
+  { name = "Javid Ditty", email = "jditty@umich.edu" },
+  { name = "Rahul Ghanshyam Chavan", email = "rchavan@umich.edu" },
+  { name = "Foyzul Hassan", email = "foyzul@umich.edu" },
+]
+dependencies = [
+  "bashlex==0.18",
+  "jsonschema==4.23.0",
+  "numpy==2.1.3",
+  "openai==1.56.2",
+  "pandas==2.2.3",
+  "pymoo==0.6.1.3",
+  "requirements-parser==0.11.0",
+  "ruamel.yaml==0.18.6",
+  "toml==0.10.2",
+  "tree-sitter==0.24.0",
+  "tree-sitter-bash==0.23.3",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = []
 
 [project.urls]
 Documentation = "https://github.com/foyzulhassan/MLCICDAnalyzer#readme"
 Issues = "https://github.com/foyzulhassan/MLCICDAnalyzer/issues"
 Source = "https://github.com/foyzulhassan/MLCICDAnalyzer"
-
-[tool.hatch.version]
-path = "src/genci/__about__.py"
-
-[tool.hatch.envs.types]
-extra-dependencies = [
-  "mypy>=1.0.0",
-]
-[tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/genci tests}"
-
-[tool.coverage.run]
-source_pkgs = ["genci", "tests"]
-branch = true
-parallel = true
-omit = [
-  "src/genci/__about__.py",
-]
-
-[tool.coverage.paths]
-genci = ["src/genci", "*/MLCICDAnalyzer/src/genci"]
-tests = ["tests", "*/MLCICDAnalyzer/tests"]
-
-[tool.coverage.report]
-exclude_lines = [
-  "no cov",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
-]

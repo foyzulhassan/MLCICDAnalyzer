@@ -1431,5 +1431,19 @@
     "wheel",
     "zope.interface",
     "zstandard"
+  ],
+  "ext": [
+    ".c",
+    ".cpp",
+    ".cs",
+    ".go",
+    ".java",
+    ".js",
+    ".php",
+    ".py",
+    ".rb",
+    ".rs",
+    ".sh",
+    ".ts"
   ]
 }

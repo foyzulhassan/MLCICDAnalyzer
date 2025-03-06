@@ -20,6 +20,20 @@ requirements_path = ""
 # absolute path to a directory to run targets in
 working_dir = ""
 
+# seconds that the target script must run for to be recommended concurrency
+concurrency_threshold = 600
+
+# Weights for Multi-Criteria Decision Making (MCDM) to distribute steps such that:
+# - the difference in duration between each step in minimized
+# - the the total number of steps is maximized
+step_mcdm_weights = [0.7, 0.3]
+
+# multiplier appied to the duration of the workflow to get the final timeout value
+timeout_multiplier = 1.2
+
+# minutes that the target script must run for to be recommended timeout-threshold
+timeout_threshold = 10
+
 # ========================================================================== #
 #                                 OPTIONAL                                   #
 # ========================================================================== #
@@ -31,3 +45,4 @@ api_key = ""
 # absolute path to a log listing the docker containers on the machine (generated with this tool)
 # - Missing: Service-based recommendations will not be provided
 # docker_path = ""
+

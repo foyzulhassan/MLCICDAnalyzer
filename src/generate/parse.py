@@ -77,7 +77,7 @@ class ParseTrace:
 
         # Check whether a ltrace log exists for the job and identify env variables
         if os.path.isfile(self.ltrace_path):
-            with open(self.ltrace_path, 'r') as log:
+            with open(self.ltrace_path, 'r', errors='ignore') as log:
                 for entry in log:
                     content = re.match(r'(\d+)\s(\d+\.\d+)\s(.+?)->getenv\("(.+?)"\)\s+=\s+"(.+?)"', entry.strip())
                     if content:
@@ -92,10 +92,11 @@ class ParseTrace:
                         env.append({'key': key, 'value': value})
 
         # Get the paths of non-imports, -workflows, and -documentation in the target repository
+        valid_extensions = tuple(self.filters['ext'])
         paths = [path \
                 for path in glob.glob(os.path.join(self.repository_dir, '**', '*'), recursive=True)
                 if os.path.isfile(path) \
-                and not path.endswith(('.yml', '.yaml', '.md')) \
+                and path.endswith(valid_extensions) \
                 and 'site-packages' not in path \
                 and 'dist-packages' not in path \
                 and 'venv' not in path]
@@ -162,7 +163,7 @@ class ParseTrace:
         versions = set()
         for path in self.paths:
             versions.update(re.findall(r'(?<=/python)\d+.\d+(?=/site-packages|/dist-packages)', path))
-        return sorted(versions) if versions else ['3.10']
+        return sorted(versions)[-1:] if versions else ['3.10']
 
     # ======================================================================= #
     #                                   UTILITY                               #

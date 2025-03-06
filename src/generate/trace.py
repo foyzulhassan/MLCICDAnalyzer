@@ -1,7 +1,10 @@
+from email.parser import HeaderParser
+import json
 import os
 from pathlib import Path
 import subprocess
 
+from tqdm import tqdm
 from tree_sitter import Language, Parser
 import tree_sitter_bash
 
@@ -35,20 +38,21 @@ class TraceTarget:
 
     def trace(self):
         """Instrument and trace a target script with strace and ltrace"""
-        if self.new_trace or not os.path.isfile(self.timestamps_path):
+        if self.new_trace or not os.path.isfile(self.timestamps_target_path):
             self.__timestamp(dump=True)
         if self.new_trace or not os.path.isfile(self.strace_path):
             self.__strace(self.timestamps_target_path)
         if self.new_trace or not os.path.isfile(self.ltrace_path):
             self.__ltrace(self.target_path)
+        if self.new_trace or not os.path.isfile(self.pip_packages_path):
+            self.__pip_packages(dump=True, verbose=True)
         if self.new_trace or not os.path.isfile(self.apt_packages_path):
-            self.__apt_packages()
+            self.__apt_packages(dump=True, verbose=True)
 
     def __strace(self, target_path: str = None) -> int:
         """Execute and trace an instrumented target script with strace"""
         target_path = self.target_path if target_path is None else target_path
-        commands = [f'strace -f -o {self.strace_path} -qqq -ttt -z --decode-fds=path --trace=open,stat bash {target_path}']
-        commands = self.__pip_packages(commands) # ran here to capture virtual environments
+        commands = [f'strace -f -o {self.strace_path} -qqq -ttt -z --decode-fds=path --trace=%file bash {target_path}']
         commands = self.__working_directory(commands)
         commands_str = '; '.join(commands)
         result = subprocess.run(commands_str, shell=True)
@@ -63,13 +67,6 @@ class TraceTarget:
         commands_str = '; '.join(commands)
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
-    
-    def __pip_packages(self, commands: list[str]) -> list[str]:
-        """Add commands to get the installed pip packages in the target environment"""
-        wrapper = []
-        wrapper.extend(commands)
-        wrapper.append(f'python3 {self.packages_path} pip {self.pip_packages_path}')
-        return wrapper
 
     def __working_directory(self, commands: list[str]) -> list[str]:
         """Add commands to return to the tool environment after tracing the target"""
@@ -88,11 +85,6 @@ class TraceTarget:
         wrapper.append(f'export PYTHONPATH={self.patch_dir}') # executes sitecustomize which instruments the target
         wrapper.extend(commands)
         return wrapper
-
-    def __apt_packages(self) -> int:
-        """Add commands to get the installed apt packages in the target environment"""
-        result = subprocess.run(f'python3 {self.packages_path} apt {self.apt_packages_path}', shell=True)
-        return result.returncode
 
     def __timestamp(self, target_path: str = None, dump: bool = False) -> str:
         """Timestamp unnested executable lines and blocks in target script"""
@@ -113,6 +105,9 @@ class TraceTarget:
         for node in shallow_nodes:
             if node.type == 'comment':
                 continue
+            if node.type == '&':
+                lines[-1] = f'{lines[-1]} &' 
+                continue
             text = node.text.decode()
             line_height = text.count('\n')+1
             lines.append(f'{text}')
@@ -126,3 +121,33 @@ class TraceTarget:
             with open(self.timestamps_target_path, 'w') as file:
                 file.write(timestamp_target)
         return timestamp_target
+
+    def __pip_packages(self, dump: bool = False, verbose: bool = False):
+        """Add commands to get the installed pip packages in the target environment"""
+        process = subprocess.run('pip freeze  | sed s/=.*//', capture_output=True, text=True, shell=True)
+        package_names = process.stdout.splitlines()
+        packages = {}
+        for package_name in tqdm(package_names, disable=not verbose, desc='SAWRA: Recording PIP Packages'):
+            process = subprocess.run(f'pip show --no-input {package_name}', capture_output=True, text=True, shell=True)
+            header = HeaderParser().parsestr(process.stdout)
+            requires = {require for require in header['Requires'].split(', ') if require.strip() != ''} if 'Requires' in header else set()
+            packages[package_name] = {
+                'version': header['Version'],
+                'requires': sorted(list(requires))}
+        if dump:
+            with open(self.pip_packages_path, 'w') as file:
+                json.dump(packages, file, indent=2)
+        return packages
+
+    def __apt_packages(self, dump: bool = False, verbose: bool = False):
+        """Add commands to get the installed apt packages in the target environment"""
+        process = subprocess.run('dpkg --get-selections | grep -v deinstall', capture_output=True, text=True, shell=True)
+        package_names = [line.split()[0] for line in process.stdout.splitlines()]
+        packages = {}
+        for package_name in tqdm(package_names, disable=not verbose, desc='SAWRA: Recording APT Packages'):
+            process = subprocess.run(f'dpkg -L {package_name}', capture_output=True, text=True, shell=True)
+            filenames = [filename for filename in process.stdout.splitlines() if os.path.isfile(filename)]
+            packages[package_name] = filenames
+        if dump:
+            with open(self.apt_packages_path, 'w') as file:
+                json.dump(packages, file, indent=2)

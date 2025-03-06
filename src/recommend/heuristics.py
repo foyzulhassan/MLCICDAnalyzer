@@ -14,13 +14,21 @@ class HeuristicRecommendations:
                  workflow_path: str,
                  output_dir: str, 
                  repository_dir: str,
-                 job_parses: dict):
+                 job_parses: dict,
+                 concurrency_threshold: float,
+                 step_mcdm_weights: list[float, float],
+                 timeout_multiplier: float,
+                 timeout_threshold: float):
         self.workflow_path = workflow_path
         self.workflow = utils.load_workflow(self.workflow_path)
         self.workflow_name = Path(self.workflow_path).stem.split('.')[0]
         self.job_parses = job_parses
         self.output_dir = output_dir
         self.repository_dir = repository_dir
+        self.concurrency_threshold = concurrency_threshold
+        self.step_mcdm_weights = step_mcdm_weights
+        self.timeout_multiplier = timeout_multiplier
+        self.timeout_threshold = timeout_threshold
         self.recommendations_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.recommendations')
         self.heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.yaml')
         
@@ -103,7 +111,7 @@ class HeuristicRecommendations:
                 json.dump(recommendations, file, indent=2)
         return recommendations
 
-    def __concurrency(self, threshold: int = 600) -> dict:
+    def __concurrency(self) -> dict:
         """Get concurrency recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
@@ -127,7 +135,7 @@ class HeuristicRecommendations:
 
             # Recommend concurrency if an ip address is present or duration is past a threshold
             duration = max(timestamps) - min(timestamps) if timestamps else 0
-            if addresses or duration >= threshold:
+            if addresses or duration >= self.concurrency_threshold:
                 recommendations[job_id] = {
                     'group': '${{ github.workflow }}-${{ github.ref }}',
                     'cancel-in-progress': True
@@ -174,7 +182,7 @@ class HeuristicRecommendations:
             recommendations[job_id] = candidates if candidates else None
         return recommendations
 
-    def __steps(self, weights: list[float, float] = [0.7, 0.3]) -> dict:
+    def __steps(self) -> dict:
         """Get steps recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
@@ -220,7 +228,7 @@ class HeuristicRecommendations:
             approx_ideal = population.min(axis=0)
             approx_nadir = population.max(axis=0)
             nF = (population - approx_ideal) / (approx_nadir - approx_ideal) if any(approx_nadir - approx_ideal) else 0
-            np_weights = np.array(weights)
+            np_weights = np.array(self.step_mcdm_weights)
             decomp = ASF()
             i = decomp.do(nF, 1/np_weights).argmin()
             decision = population[i].tolist()
@@ -236,7 +244,7 @@ class HeuristicRecommendations:
                 recommendations[job_id].append({'run': step}) if step.strip() else None 
         return recommendations
 
-    def __timeout_minutes(self, multiplier: int = 1.2, threshold: int = 10) -> dict:
+    def __timeout_minutes(self) -> dict:
         """Get timeout-minutes recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
@@ -258,8 +266,8 @@ class HeuristicRecommendations:
                         pass
 
             # Recommend timeout that is MULTIPLIER times the duration
-            minutes = round((((max(timestamps) - min(timestamps)) * multiplier) / 60)) if timestamps else None
-            if minutes > 0 and minutes >= threshold:
+            minutes = round((((max(timestamps) - min(timestamps)) * self.timeout_multiplier) / 60)) if timestamps else None
+            if minutes > 0 and minutes >= self.timeout_threshold:
                 recommendations[job_id] = minutes
         return recommendations
 
@@ -300,5 +308,6 @@ class HeuristicRecommendations:
             recommendations[job_id] = None
             if candidate_paths and len(paths) > 1:
                 working_directory = os.path.commonpath(candidate_paths)
-                recommendations[job_id] = f'./{working_directory}' if len(working_directory) > 0 else None
+                if os.path.isdir(working_directory):
+                    recommendations[job_id] = f'./{working_directory}' if len(working_directory) > 0 else None
         return recommendations
