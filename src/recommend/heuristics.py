@@ -1,8 +1,10 @@
 import copy
 import json
+import logging
 import os
 from pathlib import Path
 import re
+import time
 
 import numpy as np
 from pymoo.decomposition.asf import ASF
@@ -17,6 +19,7 @@ class HeuristicRecommendations:
                  job_parses: dict,
                  concurrency_threshold: float,
                  step_mcdm_weights: list[float, float],
+                 step_chunk_count: int,
                  timeout_multiplier: float,
                  timeout_threshold: float):
         self.workflow_path = workflow_path
@@ -27,11 +30,22 @@ class HeuristicRecommendations:
         self.repository_dir = repository_dir
         self.concurrency_threshold = concurrency_threshold
         self.step_mcdm_weights = step_mcdm_weights
+        self.step_chunk_count = step_chunk_count
         self.timeout_multiplier = timeout_multiplier
         self.timeout_threshold = timeout_threshold
         self.recommendations_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.recommendations')
         self.heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.yaml')
-        
+
+    def __duration(func):
+        def wrapper(self, *args, **kwargs): 
+            start = time.time()
+            result = func(self, *args, **kwargs) 
+            end = time.time()
+            logging.info(f'{self.workflow_name}:{str(func.__name__).strip("_")}:{round(end-start, 1)}')
+            return result 
+        return wrapper
+
+    @__duration
     def apply(self, dump: bool = False) -> dict:
         """Apply one or all recommendations to a workflow"""
         workflow = copy.deepcopy(self.workflow)
@@ -69,6 +83,7 @@ class HeuristicRecommendations:
             utils.dump_workflow(workflow, self.heuristic_path)
         return workflow
 
+    @__duration
     def recommendations(self, dump: bool = False) -> dict:
         """Get all recommendations for a workflow"""
         recommendations = {job_id: {} for job_id in self.job_parses}
@@ -111,6 +126,7 @@ class HeuristicRecommendations:
                 json.dump(recommendations, file, indent=2)
         return recommendations
 
+    @__duration
     def __concurrency(self) -> dict:
         """Get concurrency recommendations"""
         recommendations = {}
@@ -142,6 +158,7 @@ class HeuristicRecommendations:
                 }
         return recommendations
 
+    @__duration
     def __env(self) -> dict:
         """Get environmental variables recommendations"""
         recommendations = {}
@@ -149,6 +166,7 @@ class HeuristicRecommendations:
             recommendations[job_id] = self.job_parses[job_id]['env'] if self.job_parses[job_id]['env'] else None
         return recommendations
 
+    @__duration
     def __needs(self) -> tuple[dict, dict]:
         """Get needs recommendations"""
         needs = {}
@@ -173,6 +191,7 @@ class HeuristicRecommendations:
                     env[current_id][key] = f'${{needs.{previous_id}.outputs.{key}}}'
         return needs, env
 
+    @__duration
     def __outputs(self) -> dict:
         """Get output recommendations"""
         recommendations = {}
@@ -182,6 +201,7 @@ class HeuristicRecommendations:
             recommendations[job_id] = candidates if candidates else None
         return recommendations
 
+    @__duration
     def __steps(self) -> dict:
         """Get steps recommendations"""
         recommendations = {}
@@ -203,7 +223,13 @@ class HeuristicRecommendations:
                     timestamps.append(timestamp)
             
             # Seperate timestamps into all possible uneven groups
-            timestamp_groups = list(utils.uneven_chunks(timestamps))
+            uneven_chunk_generator = utils.uneven_chunks(timestamps)
+            timestamp_groups = []
+            count = 0
+            for i, group in enumerate(uneven_chunk_generator):
+                if i >= self.step_chunk_count:
+                    break
+                timestamp_groups.append(group)
 
             # Find the total start, end, and duration of each group
             total_timestamp_groups = []
@@ -227,7 +253,7 @@ class HeuristicRecommendations:
             population = np.array([[1/row[0] if row[0] != 0 else 0, row[1]] for row in optimization_groups])
             approx_ideal = population.min(axis=0)
             approx_nadir = population.max(axis=0)
-            nF = (population - approx_ideal) / (approx_nadir - approx_ideal) if any(approx_nadir - approx_ideal) else 0
+            nF = (population - approx_ideal) / (approx_nadir - approx_ideal) if all(approx_nadir - approx_ideal) else 0
             np_weights = np.array(self.step_mcdm_weights)
             decomp = ASF()
             i = decomp.do(nF, 1/np_weights).argmin()
@@ -237,13 +263,14 @@ class HeuristicRecommendations:
             decision = total_timestamp_groups[optimization_groups.index(decision)]
 
             # Recommend steps
-            run = self.workflow['jobs'][job_id]['steps'][-1]['run'].splitlines()
+            run = self.job_parses[job_id]['script'].splitlines()
             recommendations[job_id] = []
             for start, end, _ in decision:
-                step = utils.to_multiline_str(run[start-1:end])
-                recommendations[job_id].append({'run': step}) if step.strip() else None 
+                step = utils.to_multiline_str(run[start:end])
+                recommendations[job_id].append({'run': step}) if step.strip() else None
         return recommendations
 
+    @__duration
     def __timeout_minutes(self) -> dict:
         """Get timeout-minutes recommendations"""
         recommendations = {}
@@ -271,6 +298,7 @@ class HeuristicRecommendations:
                 recommendations[job_id] = minutes
         return recommendations
 
+    @__duration
     def __working_directory(self) -> dict:
         """Get working-directory recommendations"""
         def __repository_paths() -> list[str]:

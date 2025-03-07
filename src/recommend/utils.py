@@ -1,6 +1,7 @@
 from copy import deepcopy
 from io import StringIO
 from itertools import combinations
+import random
 import textwrap
 
 from jsonschema import validate
@@ -80,6 +81,7 @@ def uneven_chunks(group, min_chunk_size=1):
         return
 
     for i in range(min_chunk_size, len(group)):
-        for combo in combinations(range(1, len(group)), i):
+        chunk_combinations = list(combinations(range(1, len(group)), i))
+        for combo in random.sample(chunk_combinations, len(chunk_combinations)):
             split_points = [0] + list(combo) + [len(group)]
             yield [group[split_points[j]:split_points[j+1]] for j in range(len(split_points)-1)]

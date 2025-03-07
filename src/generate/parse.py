@@ -1,9 +1,11 @@
 import csv
 import glob
 import json
+import logging
 import os
 from pathlib import Path
 import re
+import time
 
 import requirements as requirements_parser
 
@@ -15,12 +17,16 @@ class ParseTrace:
                  requirements_path: str,
                  repository_dir: str,
                  filters_path: str,
+                 timelog_path: str,
+                 new_trace: bool,
                  docker_path: str = None):
         self.target_path = target_path
         self.output_dir = output_dir
         self.requirements_path = requirements_path
         self.repository_dir = repository_dir
         self.filters_path = filters_path
+        self.timelog_path = timelog_path
+        self.new_trace = new_trace
         self.docker_path = docker_path
 
         self.target_name = Path(self.target_path).stem.split('.')[0]
@@ -35,27 +41,43 @@ class ParseTrace:
             self.filters = json.load(file)
         self.paths = []
         self.parse_trace = {}
+        logging.basicConfig(level=logging.INFO, filename=self.timelog_path, filemode='a')
     
+    def __duration(func):
+        def wrapper(self, *args, **kwargs): 
+            start = time.time()
+            result = func(self, *args, **kwargs) 
+            end = time.time()
+            logging.info(f"{self.target_name}:{str(func.__name__).strip('_')}:{round(end-start, 1)}")
+            return result 
+        return wrapper
+
+    @__duration
     def parse(self, dump: bool = False) -> dict:
         """Parse all information from logs"""
-        self.paths = self.__paths()
-        self.parse_trace = \
-        {
-            'apt': self.__apt(),
-            'env': self.__env(),
-            'pip': self.__pip(),
-            'script': self.__script(),
-            'versions': self.__versions(),
-        }
-        if dump:
-            with open(self.parse_path, 'w') as file:
-                json.dump(self.parse_trace, file, indent=2)
+        if self.new_trace or not os.path.isfile(self.parse_path):
+            self.paths = self.__paths()
+            self.parse_trace = \
+            {
+                'apt': self.__apt(),
+                'env': self.__env(),
+                'pip': self.__pip(),
+                'script': self.__script(),
+                'versions': self.__versions(),
+            }
+            if dump:
+                with open(self.parse_path, 'w') as file:
+                    json.dump(self.parse_trace, file, indent=2)
+        else:
+            with open(self.parse_path, 'r') as file:
+                self.parse_trace = json.load(file)
         return self.parse_trace
 
     # ======================================================================= #
     #                                    STEPS                                #
     # ======================================================================= #
 
+    @__duration
     def __apt(self) -> list[str]:
         """Parse apt packages that are unique to the strace log"""
         with open(self.apt_packages_path, 'r') as file:
@@ -71,6 +93,7 @@ class ParseTrace:
                             and ':' not in package)
         return used_packages
 
+    @__duration
     def __env(self) -> dict:
         """Parse environmental variables from ltrace and pyenv"""
         env = []
@@ -115,6 +138,7 @@ class ParseTrace:
                 and not duplicate_keys.add(entry['key'])}
         return env
 
+    @__duration
     def __pip(self) -> dict:
         """Parse pip packages that are unqiue to the stract log"""
         # Identify explicit requirements in a pip requirements file
@@ -142,6 +166,7 @@ class ParseTrace:
         missing_requirements = {name: missing_requirements[name] for name in sorted(missing_requirements.keys()) if name not in self.filters['pip']}
         return missing_requirements
 
+    @__duration
     def __script(self) -> str:
         """Read the target script"""
         with open(self.target_path, 'r') as file:
@@ -149,6 +174,7 @@ class ParseTrace:
         script = ''.join([line for line in script.splitlines(keepends=True) if line.strip() and not line.strip().startswith('#')])
         return script
 
+    @__duration
     def __services(self):
         """Parse service contrainers"""
         docker_execs = [line.strip() for line in self.__script().splitlines() 
@@ -158,6 +184,7 @@ class ParseTrace:
                         or len([port for port in container['ports'] if port.split(':')[0] in self.__ports()]) > 0]
         return containers
 
+    @__duration
     def __versions(self) -> list[str]:
         """Parse python versions from strace log"""
         versions = set()

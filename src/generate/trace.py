@@ -1,8 +1,10 @@
 from email.parser import HeaderParser
 import json
+import logging
 import os
 from pathlib import Path
 import subprocess
+import time
 
 from tqdm import tqdm
 from tree_sitter import Language, Parser
@@ -17,6 +19,7 @@ class TraceTarget:
                  working_dir: str,
                  packages_path: str,
                  patch_dir: str,
+                 timelog_path: str,
                  new_trace: bool):
         self.target_path = target_path
         self.output_dir = output_dir
@@ -24,6 +27,7 @@ class TraceTarget:
         self.working_dir = working_dir
         self.packages_path = packages_path
         self.patch_dir = patch_dir
+        self.timelog_path = timelog_path
         self.new_trace = new_trace
 
         self.target_name = Path(self.target_path).stem.split('.')[0]
@@ -35,7 +39,18 @@ class TraceTarget:
         self.apt_packages_path = os.path.join(self.output_dir, 'packages.apt.json')
         self.pyenv_path = os.path.join(self.output_dir, f'{self.target_name}.pyenv')
         os.makedirs(self.output_dir, exist_ok=True)
+        logging.basicConfig(level=logging.INFO, filename=self.timelog_path, filemode='a')
 
+    def __duration(func):
+        def wrapper(self, *args, **kwargs): 
+            start = time.time()
+            result = func(self, *args, **kwargs) 
+            end = time.time()
+            logging.info(f'{self.target_name}:{str(func.__name__).strip("_")}:{round(end-start, 1)}')
+            return result 
+        return wrapper
+
+    @__duration
     def trace(self):
         """Instrument and trace a target script with strace and ltrace"""
         if self.new_trace or not os.path.isfile(self.timestamps_target_path):
@@ -49,6 +64,7 @@ class TraceTarget:
         if self.new_trace or not os.path.isfile(self.apt_packages_path):
             self.__apt_packages(dump=True, verbose=True)
 
+    @__duration
     def __strace(self, target_path: str = None) -> int:
         """Execute and trace an instrumented target script with strace"""
         target_path = self.target_path if target_path is None else target_path
@@ -58,6 +74,7 @@ class TraceTarget:
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
 
+    @__duration
     def __ltrace(self, target_path: str = None) -> int:
         """Execute and trace an instrumented target script with ltrace"""
         target_path = self.target_path if target_path is None else target_path
@@ -68,6 +85,7 @@ class TraceTarget:
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
 
+    @__duration
     def __working_directory(self, commands: list[str]) -> list[str]:
         """Add commands to return to the tool environment after tracing the target"""
         wrapper = []
@@ -77,6 +95,7 @@ class TraceTarget:
         wrapper.append('cd $PREVIOUS_WORKING_DIRECTORY')
         return wrapper
 
+    @__duration
     def __python_env(self, commands: list[str]) -> list[str]:
         """Add commands to get the environment variable accesses in python scripts"""
         wrapper = []
@@ -86,6 +105,7 @@ class TraceTarget:
         wrapper.extend(commands)
         return wrapper
 
+    @__duration
     def __timestamp(self, target_path: str = None, dump: bool = False) -> str:
         """Timestamp unnested executable lines and blocks in target script"""
         # Load the target script
@@ -122,6 +142,7 @@ class TraceTarget:
                 file.write(timestamp_target)
         return timestamp_target
 
+    @__duration
     def __pip_packages(self, dump: bool = False, verbose: bool = False):
         """Add commands to get the installed pip packages in the target environment"""
         process = subprocess.run('pip freeze  | sed s/=.*//', capture_output=True, text=True, shell=True)
@@ -139,6 +160,7 @@ class TraceTarget:
                 json.dump(packages, file, indent=2)
         return packages
 
+    @__duration
     def __apt_packages(self, dump: bool = False, verbose: bool = False):
         """Add commands to get the installed apt packages in the target environment"""
         process = subprocess.run('dpkg --get-selections | grep -v deinstall', capture_output=True, text=True, shell=True)

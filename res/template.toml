@@ -28,6 +28,9 @@ concurrency_threshold = 600
 # - the the total number of steps is maximized
 step_mcdm_weights = [0.7, 0.3]
 
+# Number of step chunks to consider when distributing commands
+step_chunk_count = 100000
+
 # multiplier appied to the duration of the workflow to get the final timeout value
 timeout_multiplier = 1.2
 
