@@ -19,7 +19,6 @@ class TraceTarget:
                  working_dir: str,
                  packages_path: str,
                  patch_dir: str,
-                 timelog_path: str,
                  new_trace: bool):
         self.target_path = target_path
         self.output_dir = output_dir
@@ -27,7 +26,6 @@ class TraceTarget:
         self.working_dir = working_dir
         self.packages_path = packages_path
         self.patch_dir = patch_dir
-        self.timelog_path = timelog_path
         self.new_trace = new_trace
 
         self.target_name = Path(self.target_path).stem.split('.')[0]
@@ -39,14 +37,18 @@ class TraceTarget:
         self.apt_packages_path = os.path.join(self.output_dir, 'packages.apt.json')
         self.pyenv_path = os.path.join(self.output_dir, f'{self.target_name}.pyenv')
         os.makedirs(self.output_dir, exist_ok=True)
-        logging.basicConfig(level=logging.INFO, filename=self.timelog_path, filemode='a')
 
     def __duration(func):
         def wrapper(self, *args, **kwargs): 
-            start = time.time()
+            start_time = time.time()
             result = func(self, *args, **kwargs) 
-            end = time.time()
-            logging.info(f'{self.target_name}:{str(func.__name__).strip("_")}:{round(end-start, 1)}')
+            end_time = time.time()
+
+            source = 'trace'
+            function = str(func.__name__)
+            duration = end_time - start_time
+
+            logging.info(f'"{source}","{function}","{duration}"')
             return result 
         return wrapper
 

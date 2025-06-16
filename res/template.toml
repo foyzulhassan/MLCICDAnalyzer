@@ -3,7 +3,7 @@
 # ========================================================================== #
 
 # name of the workflow to be produced (will be used to create the output directory)
-workflow_name = "workflow"
+workflow_name = ""
 
 # ordered list of absolute paths to target scripts 
 target_paths = []
@@ -20,22 +20,19 @@ requirements_path = ""
 # absolute path to a directory to run targets in
 working_dir = ""
 
-# seconds that the target script must run for to be recommended concurrency
-concurrency_threshold = 600
+# weights for Multi-Criteria Decision Making (MCDM) to distribute steps such that:
+# - the difference in duration between each step is minimized
+# - the total number of steps is maximized
+step_mcdm_weights = [0.6, 0.4]
 
-# Weights for Multi-Criteria Decision Making (MCDM) to distribute steps such that:
-# - the difference in duration between each step in minimized
-# - the the total number of steps is maximized
-step_mcdm_weights = [0.7, 0.3]
-
-# Number of step chunks to consider when distributing commands
+# number of potential step chunks to consider when distributing commands
 step_chunk_count = 100000
 
-# multiplier appied to the duration of the workflow to get the final timeout value
-timeout_multiplier = 1.2
+# job duration thresholds over which syntax can be recommended
+recommendation_threshold = { concurrency = 138, fail_fast = 66, timeout_minutes = 319 }
 
-# minutes that the target script must run for to be recommended timeout-threshold
-timeout_threshold = 10
+# multipliers to apply to job durations to determine syntax values
+recommendation_multiplier = { timeout_minutes = 13 }
 
 # ========================================================================== #
 #                                 OPTIONAL                                   #
@@ -48,4 +45,3 @@ api_key = ""
 # absolute path to a log listing the docker containers on the machine (generated with this tool)
 # - Missing: Service-based recommendations will not be provided
 # docker_path = ""
-

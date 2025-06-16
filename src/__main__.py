@@ -1,10 +1,8 @@
 import argparse
-import json
 import logging
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import time
 
 import toml
@@ -40,11 +38,10 @@ def apply_heuristic_recommendations(workflow_path: str, job_parses: dict):
         output_dir=CONFIG.output_dir,
         repository_dir=CONFIG.repository_dir,
         job_parses=job_parses,
-        concurrency_threshold=CONFIG.concurrency_threshold,
         step_mcdm_weights=CONFIG.step_mcdm_weights,
         step_chunk_count=CONFIG.step_chunk_count,
-        timeout_multiplier=CONFIG.timeout_multiplier,
-        timeout_threshold=CONFIG.timeout_threshold)
+        recommendation_threshold=CONFIG.recommendation_threshold,
+        recommendation_multiplier=CONFIG.recommendation_multiplier)
     print_divider(f'ANALYSIS ~ {workflow_name}', is_start=True, is_major=False)
     heuristic.recommendations(dump=True)
     print_divider(f'ANALYSIS ~ {workflow_name}', is_start=False, is_major=False)
@@ -88,7 +85,6 @@ def trace_target(target_path: str):
         repository_dir=CONFIG.repository_dir,
         packages_path=CONFIG.packages_path,
         patch_dir=CONFIG.patch_dir,
-        timelog_path=CONFIG.durations_log_path,
         new_trace=CONFIG.new_trace)
     trace.trace()
     print_divider(f'TRACE ~ {target_name}', is_start=False, is_major=False)
@@ -104,7 +100,6 @@ def parse_trace(target_path: str):
         requirements_path=CONFIG.requirements_path,
         repository_dir=CONFIG.repository_dir,
         filters_path=CONFIG.filters_path,
-        timelog_path=CONFIG.durations_log_path,
         new_trace=CONFIG.new_trace)
     parse = parse.parse(dump=True)
     print_divider(f'PARSE ~ {target_name}', is_start=False, is_major=False)
@@ -131,12 +126,12 @@ def generate_config(destination_dir: str):
     shutil.copyfile(template_path, dest_path)
 
 
-def generate_docker(destination_dir: str):
-    """Gemerate a docker log at path"""
-    docker_path = os.path.join(destination_dir, 'new_docker.docker')
-    command = 'docker ps --no-trunc --format "{{.ID}}~{{.Names}}~{{.Image}}~{{.Ports}}"'
-    with open(docker_path, 'w') as file:
-        subprocess.run(command, stdout=file, shell=True)
+# def generate_docker(destination_dir: str):
+#     """Gemerate a docker log at path"""
+#     docker_path = os.path.join(destination_dir, 'new_docker.docker')
+#     command = 'docker ps --no-trunc --format "{{.ID}}~{{.Names}}~{{.Image}}~{{.Ports}}"'
+#     with open(docker_path, 'w') as file:
+#         subprocess.run(command, stdout=file, shell=True)
 
 
 def print_divider(label: str, is_start: bool, is_major: bool = False):
@@ -190,7 +185,8 @@ def main():
 
     global START_TIME
     START_TIME = time.time()
-    logging.basicConfig(level=logging.INFO, filename=CONFIG.durations_log_path, filemode='w')
+    logging.basicConfig(format='%(message)s', level=logging.INFO, filename=CONFIG.durations_log_path, filemode='w')
+    logging.info(f'source,function,duration')
 
     # Generate and parse traces for the target scripts
     job_parses = get_job_parses()

@@ -8,6 +8,7 @@ import time
 
 import numpy as np
 from pymoo.decomposition.asf import ASF
+
 import recommend.utils as utils
 
 
@@ -17,33 +18,62 @@ class HeuristicRecommendations:
                  output_dir: str, 
                  repository_dir: str,
                  job_parses: dict,
-                 concurrency_threshold: float,
                  step_mcdm_weights: list[float, float],
                  step_chunk_count: int,
-                 timeout_multiplier: float,
-                 timeout_threshold: float):
+                 recommendation_threshold: dict[str, float],
+                 recommendation_multiplier: dict[str, float],
+    ) -> None:
         self.workflow_path = workflow_path
         self.workflow = utils.load_workflow(self.workflow_path)
         self.workflow_name = Path(self.workflow_path).stem.split('.')[0]
         self.job_parses = job_parses
         self.output_dir = output_dir
         self.repository_dir = repository_dir
-        self.concurrency_threshold = concurrency_threshold
         self.step_mcdm_weights = step_mcdm_weights
         self.step_chunk_count = step_chunk_count
-        self.timeout_multiplier = timeout_multiplier
-        self.timeout_threshold = timeout_threshold
+        self.recommendation_threshold = recommendation_threshold
+        self.recommendation_multiplier = recommendation_multiplier
+
+        self.timestamps = self.__timestamps()
         self.recommendations_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.recommendations')
         self.heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.yaml')
 
     def __duration(func):
         def wrapper(self, *args, **kwargs): 
-            start = time.time()
+            start_time = time.time()
             result = func(self, *args, **kwargs) 
-            end = time.time()
-            logging.info(f'{self.workflow_name}:{str(func.__name__).strip("_")}:{round(end-start, 1)}')
+            end_time = time.time()
+
+            source = 'heuristic'
+            function = str(func.__name__)
+            duration = end_time - start_time
+
+            logging.info(f'"{source}","{function}","{duration}"')
             return result 
         return wrapper
+
+    def __timestamps(self) -> dict:
+        """Identify timestamps in strace logs for each job"""
+
+        def is_numeric(value) -> float | None:
+            """Check whether a value is a number"""
+            try:
+                return float(value)
+            except ValueError:
+                return None
+
+        timestamps = {}
+        for job_id in self.workflow['jobs']:
+            timestamps[job_id] = []
+            log_path = os.path.join(self.output_dir, f'{job_id}.strace')
+            with open(log_path, 'r') as log:
+                for entry in log:
+                    value = entry.split(maxsplit=2)[1]
+                    value = is_numeric(value)
+                    if value is not None:
+                        timestamps[job_id].append(value)
+
+        return timestamps
 
     @__duration
     def apply(self, dump: bool = False) -> dict:
@@ -58,6 +88,11 @@ class HeuristicRecommendations:
 
                 if recommendations[job_id]['env']:
                     workflow['jobs'][job_id]['env'] = recommendations[job_id]['env']
+
+                if recommendations[job_id]['fail-fast']:
+                    if 'strategy' not in workflow['jobs'][job_id]:
+                        workflow['jobs'][job_id]['strategy'] = {}
+                    workflow['jobs'][job_id]['strategy']['fail-fast'] = recommendations[job_id]['fail-fast']
 
                 # if recommendations[job_id]['needs']:
                 #     workflow['jobs'][job_id]['needs'] = recommendations[job_id]['needs']
@@ -96,6 +131,10 @@ class HeuristicRecommendations:
         for job_id in env:
             recommendations[job_id]['env'] = env[job_id]
 
+        fail_fast = self.__fail_fast()
+        for job_id in fail_fast:
+            recommendations[job_id]['fail-fast'] = fail_fast[job_id]
+
         # needs, needs_env = self.__needs()
         # for job_id in needs:
         #     recommendations[job_id]['needs'] = needs[job_id]
@@ -131,30 +170,14 @@ class HeuristicRecommendations:
         """Get concurrency recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
-            recommendations[job_id] = None
-
-            # Check whether a strace log exists for the job
-            log_path = os.path.join(self.output_dir, f'{job_id}.strace')
-            if not os.path.isfile(log_path):
-                continue
-            
-            # Identify ip addresses and timestamps in strace log
-            addresses = []
-            timestamps = []
-            with open(log_path, 'r') as log:
-                for entry in log:
-                    address = re.findall('(?<=inet_addr\\(\").+?(?=\"\\))', entry)
-                    addresses.extend(address)
-                    if entry.split(maxsplit=2)[1].isnumeric():
-                        timestamp = float(entry.split(maxsplit=2)[1])
-                        timestamps.append(timestamp)
-
-            # Recommend concurrency if an ip address is present or duration is past a threshold
+            timestamps = self.timestamps[job_id]
             duration = max(timestamps) - min(timestamps) if timestamps else 0
-            if addresses or duration >= self.concurrency_threshold:
-                recommendations[job_id] = {
+            recommendations[job_id] = None
+            if duration >= self.recommendation_threshold['concurrency']:
+                recommendations[job_id] = \
+                {
                     'group': '${{ github.workflow }}-${{ github.ref }}',
-                    'cancel-in-progress': True
+                    'cancel-in-progress': True,
                 }
         return recommendations
 
@@ -164,6 +187,18 @@ class HeuristicRecommendations:
         recommendations = {}
         for job_id in self.workflow['jobs']:
             recommendations[job_id] = self.job_parses[job_id]['env'] if self.job_parses[job_id]['env'] else None
+        return recommendations
+
+    @__duration
+    def __fail_fast(self) -> dict:
+        """Get fail-fast recommendations"""
+        recommendations = {}
+        for job_id in self.workflow['jobs']:
+            timestamps = self.timestamps[job_id]
+            duration = max(timestamps) - min(timestamps) if timestamps else 0
+            recommendations[job_id] = None
+            if duration >= self.recommendation_threshold['fail_fast']:
+                recommendations[job_id] = True
         return recommendations
 
     @__duration
@@ -275,27 +310,11 @@ class HeuristicRecommendations:
         """Get timeout-minutes recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
+            timestamps = self.timestamps[job_id]
+            duration = max(timestamps) - min(timestamps) if timestamps else 0
             recommendations[job_id] = None
-
-            # Check whether a strace log exists for the job
-            log_path = os.path.join(self.output_dir, f'{job_id}.strace')
-            if not os.path.isfile(log_path):
-                continue
-            
-            # Identify timestamps in a strace log
-            timestamps = []
-            with open(log_path, 'r') as log:
-                for entry in log:
-                    try:
-                        timestamp = float(entry.split(maxsplit=2)[1])
-                        timestamps.append(timestamp)
-                    except ValueError:
-                        pass
-
-            # Recommend timeout that is MULTIPLIER times the duration
-            minutes = round((((max(timestamps) - min(timestamps)) * self.timeout_multiplier) / 60)) if timestamps else None
-            if minutes > 0 and minutes >= self.timeout_threshold:
-                recommendations[job_id] = minutes
+            if duration >= self.recommendation_threshold['timeout_minutes']:
+                recommendations[job_id] = (duration * self.recommendation_multiplier['timeout_minutes']) / 60 
         return recommendations
 
     @__duration

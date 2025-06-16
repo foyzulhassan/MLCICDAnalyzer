@@ -17,7 +17,6 @@ class ParseTrace:
                  requirements_path: str,
                  repository_dir: str,
                  filters_path: str,
-                 timelog_path: str,
                  new_trace: bool,
                  docker_path: str = None):
         self.target_path = target_path
@@ -25,7 +24,6 @@ class ParseTrace:
         self.requirements_path = requirements_path
         self.repository_dir = repository_dir
         self.filters_path = filters_path
-        self.timelog_path = timelog_path
         self.new_trace = new_trace
         self.docker_path = docker_path
 
@@ -41,14 +39,18 @@ class ParseTrace:
             self.filters = json.load(file)
         self.paths = []
         self.parse_trace = {}
-        logging.basicConfig(level=logging.INFO, filename=self.timelog_path, filemode='a')
     
     def __duration(func):
         def wrapper(self, *args, **kwargs): 
-            start = time.time()
+            start_time = time.time()
             result = func(self, *args, **kwargs) 
-            end = time.time()
-            logging.info(f"{self.target_name}:{str(func.__name__).strip('_')}:{round(end-start, 1)}")
+            end_time = time.time()
+
+            source = 'parse'
+            function = str(func.__name__)
+            duration = end_time - start_time
+
+            logging.info(f'"{source}","{function}","{duration}"')
             return result 
         return wrapper
 

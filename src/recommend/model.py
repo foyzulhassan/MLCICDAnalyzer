@@ -1,9 +1,8 @@
-import copy
 import json
-import os
 from pathlib import Path
 
 from openai import OpenAI
+
 import recommend.utils as utils
 
 
