@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 from pathlib import Path
+import subprocess
 import shutil
 import time
 
@@ -11,7 +12,7 @@ from generate.trace import TraceTarget
 from generate.parse import ParseTrace
 from generate.workflow import Workflow
 from recommend.heuristics import HeuristicRecommendations
-from recommend.model import ModelRecommendations
+from recommend.model import ModelRecommendations, HybridRecommendations
 
 
 TOOL_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -55,11 +56,19 @@ def apply_model_recommendations(workflow_path: str):
     """Apply model recommendations to workflow"""
     model = ModelRecommendations(
         workflow_path=workflow_path,
-        output_dir=CONFIG.output_dir,
         schema_path=CONFIG.schema_path,
-        api_key=CONFIG.api_key)
-    model.recommendations(dump=True)
-    model.apply(dump=True)
+        target_paths=CONFIG.target_paths,
+        template_path=CONFIG.model_template_path,
+        instruction_path=CONFIG.model_instruction_path,
+        output_dir=CONFIG.output_dir,
+        api_key=CONFIG.api_key,
+        model=CONFIG.model)
+    model.apply()
+
+
+def apply_hybrid_recommendations(workflow_path: str):
+    """Apply hybrid recommendations to workflow"""
+    pass
 
 
 def get_job_parses() -> dict:
@@ -126,12 +135,12 @@ def generate_config(destination_dir: str):
     shutil.copyfile(template_path, dest_path)
 
 
-# def generate_docker(destination_dir: str):
-#     """Gemerate a docker log at path"""
-#     docker_path = os.path.join(destination_dir, 'new_docker.docker')
-#     command = 'docker ps --no-trunc --format "{{.ID}}~{{.Names}}~{{.Image}}~{{.Ports}}"'
-#     with open(docker_path, 'w') as file:
-#         subprocess.run(command, stdout=file, shell=True)
+def generate_docker(destination_dir: str):
+    """Gemerate a docker log at path"""
+    docker_path = os.path.join(destination_dir, 'new_docker.docker')
+    command = 'docker ps --no-trunc --format "{{.ID}}~{{.Names}}~{{.Image}}~{{.Ports}}"'
+    with open(docker_path, 'w') as file:
+        subprocess.run(command, stdout=file, shell=True)
 
 
 def print_divider(label: str, is_start: bool, is_major: bool = False):
@@ -151,6 +160,8 @@ def parse_config(config_path: str, new_trace: bool = False):
     config_dict['packages_path'] = os.path.join(RES_DIR, 'packages.py')
     config_dict['filters_path'] = os.path.join(RES_DIR, 'filters.json')
     config_dict['schema_path'] = os.path.join(RES_DIR, 'github-workflow.json')
+    config_dict['model_template_path'] = os.path.join(RES_DIR, 'templates', 'llm.template.txt')
+    config_dict['model_instruction_path'] = os.path.join(RES_DIR, 'instructions', 'llm.instructions.txt')
     config_dict['durations_log_path'] = os.path.join(config_dict['output_dir'], 'durations.log')
     return Config(config_dict)
 
@@ -198,6 +209,7 @@ def main():
     apply_heuristic_recommendations(workflow_path=base_path, job_parses=job_parses)
     if CONFIG.api_key and ARGS.use_model:
         apply_model_recommendations(heuristic_path)
+        apply_hybrid_recommendations(heuristic_path)
 
     # Check whether to remove artifacts besides yaml files
     if ARGS.no_artifacts:
