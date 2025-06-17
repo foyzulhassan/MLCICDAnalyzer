@@ -2,6 +2,9 @@
 #                                 REQUIRED                                   #
 # ========================================================================== #
 
+# name of the project
+project_name = ""
+
 # name of the workflow to be produced (will be used to create the output directory)
 workflow_name = ""
 

@@ -10,9 +10,11 @@ import toml
 
 from generate.trace import TraceTarget
 from generate.parse import ParseTrace
+from generate.summarize import summarize
 from generate.workflow import Workflow
 from recommend.heuristics import HeuristicRecommendations
-from recommend.model import ModelRecommendations, HybridRecommendations
+from recommend.model import ModelRecommendations
+from recommend.hybrid import VectorRecommendations, QdrantVectorizer
 
 
 TOOL_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -52,23 +54,46 @@ def apply_heuristic_recommendations(workflow_path: str, job_parses: dict):
     print_divider('HEURISTICS', is_start=False, is_major=True)
 
 
-def apply_model_recommendations(workflow_path: str):
+def apply_model_recommendations(workflow_path: str) -> dict:
     """Apply model recommendations to workflow"""
+    print_divider('MODEL', is_start=True, is_major=True)
     model = ModelRecommendations(
         workflow_path=workflow_path,
-        schema_path=CONFIG.schema_path,
         target_paths=CONFIG.target_paths,
         template_path=CONFIG.model_template_path,
         instruction_path=CONFIG.model_instruction_path,
         output_dir=CONFIG.output_dir,
         api_key=CONFIG.api_key,
         model=CONFIG.model)
-    model.apply()
+    print_divider('MODEL', is_start=False, is_major=True)
+    return model.apply()
 
 
-def apply_hybrid_recommendations(workflow_path: str):
+def apply_hybrid_recommendations(workflow_path: str) -> dict:
     """Apply hybrid recommendations to workflow"""
-    pass
+    print_divider('VECTOR', is_start=True, is_major=True)
+    print_divider('VECTORIZE', is_start=True, is_major=False)
+    vectorizer = QdrantVectorizer(
+        project_name=CONFIG.project_name,
+        output_dir=CONFIG.output_dir,
+        api_key=CONFIG.api_key,
+    )
+    vectorizer.vectorize()
+    print_divider('VECTORIZE', is_start=False, is_major=False)
+    print_divider('GENERATE', is_start=True, is_major=False)
+    vector = VectorRecommendations(
+        project_name=CONFIG.project_name,
+        workflow_path=workflow_path,
+        requirements_path=CONFIG.requirements_path,
+        target_paths=CONFIG.target_paths,
+        assemble_prompt_path=CONFIG.assemble_prompt_path,
+        job_prompt_path=CONFIG.job_prompt_path,
+        output_dir=CONFIG.output_dir,
+        api_key=CONFIG.api_key,
+        model=CONFIG.model)
+    print_divider('GENERATE', is_start=False, is_major=False)
+    print_divider('VECTOR', is_start=False, is_major=True)
+    return vector.apply()
 
 
 def get_job_parses() -> dict:
@@ -79,6 +104,7 @@ def get_job_parses() -> dict:
         target_name = Path(target_path).stem
         trace_target(target_path)
         job_parses[target_name] = parse_trace(target_path)
+    summarize(CONFIG.output_dir)
     print_divider('MONITORING', is_start=False, is_major=True)
     return job_parses
 
@@ -160,8 +186,10 @@ def parse_config(config_path: str, new_trace: bool = False):
     config_dict['packages_path'] = os.path.join(RES_DIR, 'packages.py')
     config_dict['filters_path'] = os.path.join(RES_DIR, 'filters.json')
     config_dict['schema_path'] = os.path.join(RES_DIR, 'github-workflow.json')
-    config_dict['model_template_path'] = os.path.join(RES_DIR, 'templates', 'llm.template.txt')
-    config_dict['model_instruction_path'] = os.path.join(RES_DIR, 'instructions', 'llm.instructions.txt')
+    config_dict['model_template_path'] = os.path.join(RES_DIR, 'templates', 'model.template.txt')
+    config_dict['model_instruction_path'] = os.path.join(RES_DIR, 'instructions', 'model.instructions.txt')
+    config_dict['assemble_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'assemble.instructions.txt')
+    config_dict['job_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'job.instructions.txt')
     config_dict['durations_log_path'] = os.path.join(config_dict['output_dir'], 'durations.log')
     return Config(config_dict)
 
