@@ -16,6 +16,7 @@ class HeuristicRecommendations:
     def __init__(self,
                  workflow_path: str,
                  output_dir: str, 
+                 duration_log_path: str, 
                  repository_dir: str,
                  job_parses: dict,
                  step_mcdm_weights: list[float, float],
@@ -23,6 +24,13 @@ class HeuristicRecommendations:
                  recommendation_threshold: dict[str, float],
                  recommendation_multiplier: dict[str, float],
     ) -> None:
+        self.duration_log_path = duration_log_path
+        self.duration_logger = logging.getLogger(f'{__name__}.duration')
+        self.duration_logger.setLevel(logging.INFO)
+        self.duration_handler = logging.FileHandler(self.duration_log_path)
+        self.duration_handler.setFormatter(logging.Formatter('%(message)s'))
+        self.duration_logger.addHandler(self.duration_handler)
+
         self.workflow_path = workflow_path
         self.workflow = utils.load_workflow(self.workflow_path)
         self.workflow_name = Path(self.workflow_path).stem.split('.')[0]
@@ -39,17 +47,18 @@ class HeuristicRecommendations:
         self.heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.yaml')
 
     def __duration(func):
-        def wrapper(self, *args, **kwargs): 
+        def wrapper(self, *args, **kwargs):
+            # Calculate the duration
             start_time = time.time()
             result = func(self, *args, **kwargs) 
             end_time = time.time()
-
-            source = 'heuristic'
-            function = str(func.__name__)
             duration = end_time - start_time
 
-            logging.info(f'"{source}","{function}","{duration}"')
-            return result 
+            # Log the duration
+            source = 'heuristic'
+            function = str(func.__name__)
+            self.duration_logger.info(f'"{source}","{function}","{duration}"')
+            return result
         return wrapper
 
     def __timestamps(self) -> dict:

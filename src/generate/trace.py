@@ -15,11 +15,19 @@ class TraceTarget:
     def __init__(self, 
                  target_path: str, 
                  output_dir: str,
+                 duration_log_path: str,
                  repository_dir: str,
                  working_dir: str,
                  packages_path: str,
                  patch_dir: str,
                  new_trace: bool):
+        self.duration_log_path = duration_log_path
+        self.duration_logger = logging.getLogger(f'{__name__}.duration')
+        self.duration_logger.setLevel(logging.INFO)
+        self.duration_handler = logging.FileHandler(self.duration_log_path)
+        self.duration_handler.setFormatter(logging.Formatter('%(message)s'))
+        self.duration_logger.addHandler(self.duration_handler)
+
         self.target_path = target_path
         self.output_dir = output_dir
         self.repository_dir = repository_dir
@@ -39,17 +47,18 @@ class TraceTarget:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def __duration(func):
-        def wrapper(self, *args, **kwargs): 
+        def wrapper(self, *args, **kwargs):
+            # Calculate the duration
             start_time = time.time()
             result = func(self, *args, **kwargs) 
             end_time = time.time()
-
-            source = 'trace'
-            function = str(func.__name__)
             duration = end_time - start_time
 
-            logging.info(f'"{source}","{function}","{duration}"')
-            return result 
+            # Log the duration
+            source = 'trace'
+            function = str(func.__name__)
+            self.duration_logger.info(f'"{source}","{function}","{duration}"')
+            return result
         return wrapper
 
     @__duration

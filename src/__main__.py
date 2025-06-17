@@ -39,6 +39,7 @@ def apply_heuristic_recommendations(workflow_path: str, job_parses: dict):
     heuristic = HeuristicRecommendations(
         workflow_path=workflow_path,
         output_dir=CONFIG.output_dir,
+        duration_log_path=CONFIG.duration_log_path,
         repository_dir=CONFIG.repository_dir,
         job_parses=job_parses,
         step_mcdm_weights=CONFIG.step_mcdm_weights,
@@ -63,6 +64,8 @@ def apply_model_recommendations(workflow_path: str) -> dict:
         template_path=CONFIG.model_template_path,
         instruction_path=CONFIG.model_instruction_path,
         output_dir=CONFIG.output_dir,
+        duration_log_path=CONFIG.duration_log_path,
+        usage_log_path=CONFIG.usage_log_path,
         api_key=CONFIG.api_key,
         model=CONFIG.model)
     print_divider('MODEL', is_start=False, is_major=True)
@@ -76,6 +79,8 @@ def apply_hybrid_recommendations(workflow_path: str) -> dict:
     vectorizer = QdrantVectorizer(
         project_name=CONFIG.project_name,
         output_dir=CONFIG.output_dir,
+        duration_log_path=CONFIG.duration_log_path,
+        usage_log_path=CONFIG.usage_log_path,
         api_key=CONFIG.api_key,
     )
     vectorizer.vectorize()
@@ -89,6 +94,8 @@ def apply_hybrid_recommendations(workflow_path: str) -> dict:
         assemble_prompt_path=CONFIG.assemble_prompt_path,
         job_prompt_path=CONFIG.job_prompt_path,
         output_dir=CONFIG.output_dir,
+        duration_log_path=CONFIG.duration_log_path,
+        usage_log_path=CONFIG.usage_log_path,
         api_key=CONFIG.api_key,
         model=CONFIG.model)
     print_divider('GENERATE', is_start=False, is_major=False)
@@ -116,6 +123,7 @@ def trace_target(target_path: str):
     trace = TraceTarget(
         target_path=target_path,
         output_dir=CONFIG.output_dir,
+        duration_log_path=CONFIG.duration_log_path,
         working_dir=CONFIG.working_dir,
         repository_dir=CONFIG.repository_dir,
         packages_path=CONFIG.packages_path,
@@ -132,6 +140,7 @@ def parse_trace(target_path: str):
     parse = ParseTrace(
         target_path=target_path,
         output_dir=CONFIG.output_dir,
+        duration_log_path=CONFIG.duration_log_path,
         requirements_path=CONFIG.requirements_path,
         repository_dir=CONFIG.repository_dir,
         filters_path=CONFIG.filters_path,
@@ -141,13 +150,13 @@ def parse_trace(target_path: str):
     return parse
 
 
-def remove_artifacts(start_time: float):
+def remove_artifacts():
     """Delete artifacts that were created by the tool"""
     paths = [os.path.join(CONFIG.output_dir, name) for name in os.listdir(CONFIG.output_dir) if os.path.isfile(os.path.join(CONFIG.output_dir, name))]
     print_divider('TEARDOWN', is_start=True, is_major=True)
     print('Deleting Artifacts...')
     for path in paths:
-        if not path.endswith('.yaml') and os.path.getatime(path) >= start_time:
+        if not path.endswith('.yaml') and os.path.getatime(path) >= START_TIME:
             # Files that were accidently put in output dir are (likely) not automatically removed due to the access time check
             os.remove(path)
             print(path)
@@ -190,7 +199,8 @@ def parse_config(config_path: str, new_trace: bool = False):
     config_dict['model_instruction_path'] = os.path.join(RES_DIR, 'instructions', 'model.instructions.txt')
     config_dict['assemble_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'assemble.instructions.txt')
     config_dict['job_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'job.instructions.txt')
-    config_dict['durations_log_path'] = os.path.join(config_dict['output_dir'], 'durations.log')
+    config_dict['duration_log_path'] = os.path.join(config_dict['output_dir'], 'duration.log')
+    config_dict['usage_log_path'] = os.path.join(config_dict['output_dir'], 'usage.log')
     return Config(config_dict)
 
 
@@ -222,10 +232,15 @@ def main():
     global CONFIG
     CONFIG = parse_config(ARGS.config_path, ARGS.new_trace)
 
+    # Reset the logs
+    with open(CONFIG.duration_log_path, 'w') as file:
+        file.write('source,function,duration\n')
+    with open(CONFIG.usage_log_path, 'w') as file:
+        file.write('source,purpose,prompt_tokens,completion_tokens,total_tokens\n')
+
+    # Start the timer
     global START_TIME
     START_TIME = time.time()
-    logging.basicConfig(format='%(message)s', level=logging.INFO, filename=CONFIG.durations_log_path, filemode='w')
-    logging.info(f'source,function,duration')
 
     # Generate and parse traces for the target scripts
     job_parses = get_job_parses()
@@ -241,7 +256,7 @@ def main():
 
     # Check whether to remove artifacts besides yaml files
     if ARGS.no_artifacts:
-        remove_artifacts(START_TIME)
+        remove_artifacts()
 
 
 if __name__ == '__main__':
