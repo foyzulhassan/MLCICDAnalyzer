@@ -205,9 +205,7 @@ class HeuristicRecommendations:
         for job_id in self.workflow['jobs']:
             timestamps = self.timestamps[job_id]
             duration = max(timestamps) - min(timestamps) if timestamps else 0
-            recommendations[job_id] = None
-            if duration >= self.recommendation_threshold['fail_fast']:
-                recommendations[job_id] = True
+            recommendations[job_id] = duration >= self.recommendation_threshold['fail_fast']
         return recommendations
 
     @__duration
