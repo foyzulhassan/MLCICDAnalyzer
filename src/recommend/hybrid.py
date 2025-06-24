@@ -8,11 +8,14 @@ import uuid
 
 import openai
 from openai import OpenAI
+import qdrant_client
 from qdrant_client import QdrantClient
+import qdrant_client.embed.embedder
 from qdrant_client.http import models as qmodels
 from qdrant_client.http.models import Distance, FieldCondition, Filter, MatchValue, ScoredPoint, VectorParams
 import subprocess
 
+import qdrant_client.embed
 import recommend.utils as utils
 
 
@@ -280,7 +283,8 @@ class QdrantVectorizer:
         self.output_dir = output_dir
 
         # Initialize embedding vector
-        self.qdrant = QdrantClient(host='localhost', port=6333, https=False)
+        self.openai_client = OpenAI(api_key=api_key)
+        self.qdrant_client = QdrantClient(host='localhost', api_key=api_key, port=6333, https=False)
         self.collection_name = collection_name
         self.chunk_size = chunk_size
         self.embedding_model = embedding_model
@@ -306,12 +310,16 @@ class QdrantVectorizer:
         """Vectorize target traces and upload them"""
         self.__ensure_collections()
 
-        paths = glob.glob(os.path.join(self.output_dir, '*.sumtrace'))
-        for path in paths:
-            # Load the text and chunk it
-            with open(path, 'r') as file:
-                content = file.read().strip()
-            chunks = self.__chunk_text(content)
+        # Load the trace summary file
+        summary_path = os.path.join(self.output_dir, 'summary.json')
+        with open(summary_path, 'r') as file:
+            summary = json.load(file)
+
+        # Iterate through traces, chunk them, and embed them
+        for trace_path, traced_values in summary.items():
+            parsed = traced_values if isinstance(traced_values, list) else [f'"{k}": "{v}"' for k, v, in traced_values.items()]
+            parsed = '\n'.join(parsed)
+            chunks = self.__chunk_text(parsed)
 
             # Iterate through chunks and embed them
             for i, chunk in enumerate(chunks):
@@ -320,12 +328,12 @@ class QdrantVectorizer:
                 payload = \
                 {
                     'project': self.project_name,
-                    'file': Path(path).name,
-                    'shell_file': Path(path).stem,
+                    'file': Path(trace_path).name,
+                    'shell_file': Path(trace_path).stem,
                     'chunk': chunk,
                     'chunk_id': i,
                 }
-                self.qdrant.upsert \
+                self.qdrant_client.upsert \
                 (
                     collection_name=self.collection_name,
                     points=[qmodels.PointStruct(id=id, vector=embedding, payload=payload)],
@@ -334,18 +342,18 @@ class QdrantVectorizer:
     @__duration
     def __ensure_collections(self) -> None:
         """Ensure that all collections exist (and create them if they don't)"""
-        if not self.qdrant.collection_exists(self.collection_name):
-            self.qdrant.recreate_collection \
+        if not self.qdrant_client.collection_exists(self.collection_name):
+            self.qdrant_client.recreate_collection \
             (
                 collection_name=self.collection_name,
-                vectors_config=VectorParams(size=1536, distance=Distance.EUCLID),
+                vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
             )
 
     @__duration
     def __embedding(self, text: str | list[str]) -> list[float]:
         """Get text embeddings from an embedding model"""
         input = [text] if isinstance(text, str) else text
-        response = openai.embeddings.create(input=input, model=self.embedding_model)
+        response = self.openai_client.embeddings.create(input=input, model=self.embedding_model)
 
         source = 'qdrant'
         purpose = 'embed'

@@ -2,14 +2,14 @@ You are an AI model specialized in generating accurate and efficient GitHub Acti
 
 ---
 
-### 🔧 You are given:
+### You are given:
 - A **single shell script** (filename + content)
 - A list of Python dependencies from `requirements.txt`
 - The top-matched **runtime info chunks** from trace logs (`strace`, `ltrace`, `pyenv`) extracted using vector embeddings
 
 ---
 
-### 🎯 Your task is:
+### Your task is:
 Generate **only one job block** for a GitHub Actions workflow file. The job must:
 - Be named after the shell script filename (excluding `.sh`)
 - Run on `ubuntu-latest`
@@ -23,7 +23,7 @@ Generate **only one job block** for a GitHub Actions workflow file. The job must
 
 ---
 
-### 📥 Example Input:
+### Example Input:
 ```json
 {
   "shell_script": {
@@ -44,7 +44,7 @@ Generate **only one job block** for a GitHub Actions workflow file. The job must
 
 ---
 
-### 🧪 Example Output:
+### Example Output:
 ```yaml
 test:
   runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ test:
 
 ---
 
-### ❌ Do NOT:
+### Do NOT:
 - Output anything except the job block
 - Add YAML headers like `name:` or `on:`
 - Add markdown, notes, or explanations

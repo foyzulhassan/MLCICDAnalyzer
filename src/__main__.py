@@ -98,9 +98,10 @@ def apply_hybrid_recommendations(workflow_path: str) -> dict:
         usage_log_path=CONFIG.usage_log_path,
         api_key=CONFIG.api_key,
         model=CONFIG.model)
+    vector_workflow = vector.apply()
     print_divider('GENERATE', is_start=False, is_major=False)
     print_divider('VECTOR', is_start=False, is_major=True)
-    return vector.apply()
+    return vector_workflow
 
 
 def get_job_parses() -> dict:
@@ -111,7 +112,7 @@ def get_job_parses() -> dict:
         target_name = Path(target_path).stem
         trace_target(target_path)
         job_parses[target_name] = parse_trace(target_path)
-    summarize(CONFIG.output_dir)
+    summarize(CONFIG.output_dir, CONFIG.filters_path)
     print_divider('MONITORING', is_start=False, is_major=True)
     return job_parses
 
