@@ -1,5 +1,4 @@
 import argparse
-import logging
 import os
 from pathlib import Path
 import subprocess
@@ -66,42 +65,76 @@ def apply_model_recommendations(workflow_path: str) -> dict:
         output_dir=CONFIG.output_dir,
         duration_log_path=CONFIG.duration_log_path,
         usage_log_path=CONFIG.usage_log_path,
-        api_key=CONFIG.api_key,
-        model=CONFIG.model)
+        api_key=CONFIG.openai['api_key'],
+        chat_model=CONFIG.openai['chat_model'])
     print_divider('MODEL', is_start=False, is_major=True)
     return model.apply()
 
 
-def apply_hybrid_recommendations(workflow_path: str) -> dict:
+def apply_hybrid_recommendations(workflow_path: str) -> tuple[dict, dict]:
     """Apply hybrid recommendations to workflow"""
     print_divider('VECTOR', is_start=True, is_major=True)
     print_divider('VECTORIZE', is_start=True, is_major=False)
     vectorizer = QdrantVectorizer(
         project_name=CONFIG.project_name,
         output_dir=CONFIG.output_dir,
+        
         duration_log_path=CONFIG.duration_log_path,
         usage_log_path=CONFIG.usage_log_path,
-        api_key=CONFIG.api_key,
+
+        embedding_hostname=CONFIG.qdrant['hostname'],
+        embedding_port=CONFIG.qdrant['port'],
+        embedding_api_key=CONFIG.qdrant['api_key'],
+        embedding_model=CONFIG.openai['embedding_model'],
     )
     vectorizer.vectorize()
     print_divider('VECTORIZE', is_start=False, is_major=False)
     print_divider('GENERATE', is_start=True, is_major=False)
     vector = VectorRecommendations(
         project_name=CONFIG.project_name,
+        output_dir=CONFIG.output_dir,
+        hybrid_mode=False,
+
         workflow_path=workflow_path,
         requirements_path=CONFIG.requirements_path,
         target_paths=CONFIG.target_paths,
         assemble_prompt_path=CONFIG.assemble_prompt_path,
         job_prompt_path=CONFIG.job_prompt_path,
-        output_dir=CONFIG.output_dir,
+
         duration_log_path=CONFIG.duration_log_path,
         usage_log_path=CONFIG.usage_log_path,
-        api_key=CONFIG.api_key,
-        model=CONFIG.model)
+        
+        chat_model=CONFIG.openai['chat_model'],
+        chat_api_key=CONFIG.openai['api_key'],
+        embedding_hostname=CONFIG.qdrant['hostname'],
+        embedding_port=CONFIG.qdrant['port'],
+        embedding_api_key=CONFIG.qdrant['api_key'],
+        embedding_model=CONFIG.openai['embedding_model'])
     vector_workflow = vector.apply()
+    hybrid = VectorRecommendations(
+        project_name=CONFIG.project_name,
+        output_dir=CONFIG.output_dir,
+        hybrid_mode=True,
+
+        workflow_path=workflow_path,
+        requirements_path=CONFIG.requirements_path,
+        target_paths=CONFIG.target_paths,
+        assemble_prompt_path=CONFIG.heuristic_assemble_prompt_path,
+        job_prompt_path=CONFIG.job_prompt_path,
+
+        duration_log_path=CONFIG.duration_log_path,
+        usage_log_path=CONFIG.usage_log_path,
+        
+        chat_model=CONFIG.openai['chat_model'],
+        chat_api_key=CONFIG.openai['api_key'],
+        embedding_hostname=CONFIG.qdrant['hostname'],
+        embedding_port=CONFIG.qdrant['port'],
+        embedding_api_key=CONFIG.qdrant['api_key'],
+        embedding_model=CONFIG.openai['embedding_model'])
+    hybrid_workflow = hybrid.apply()
     print_divider('GENERATE', is_start=False, is_major=False)
     print_divider('VECTOR', is_start=False, is_major=True)
-    return vector_workflow
+    return vector_workflow, hybrid_workflow
 
 
 def get_job_parses() -> dict:
@@ -199,6 +232,7 @@ def parse_config(config_path: str, new_trace: bool = False):
     config_dict['model_template_path'] = os.path.join(RES_DIR, 'templates', 'model.template.txt')
     config_dict['model_instruction_path'] = os.path.join(RES_DIR, 'instructions', 'model.instructions.txt')
     config_dict['assemble_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'assemble.instructions.txt')
+    config_dict['heuristic_assemble_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'heuristic.assemble.instructions.txt')
     config_dict['job_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'job.instructions.txt')
     config_dict['duration_log_path'] = os.path.join(config_dict['output_dir'], 'duration.log')
     config_dict['usage_log_path'] = os.path.join(config_dict['output_dir'], 'usage.log')
@@ -251,7 +285,7 @@ def main():
     # Generate workflows
     generate_base_workflow(job_parses)
     apply_heuristic_recommendations(workflow_path=base_path, job_parses=job_parses)
-    if CONFIG.api_key and ARGS.use_model:
+    if CONFIG.openai['api_key'] and CONFIG.qdrant['api_key'] and ARGS.use_model:
         apply_model_recommendations(heuristic_path)
         apply_hybrid_recommendations(heuristic_path)
 

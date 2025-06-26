@@ -87,12 +87,12 @@ def uneven_chunks(group, min_chunk_size=1):
             yield [group[split_points[j]:split_points[j+1]] for j in range(len(split_points)-1)]
 
 
-def sanitize_workflow(workflow: str) -> dict:
+def sanitize_workflow(workflow: str) -> str:
     """Localize the workflow string from a model and parse it into a dict"""
     lines = workflow.splitlines()
     if lines and lines[0].strip().lower() == "```yaml":
         lines = lines[1:]
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
-    workflow = workflow_to_dict('\n'.join(lines))
+    workflow = '\n'.join(lines)
     return workflow

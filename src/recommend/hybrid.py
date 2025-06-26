@@ -6,16 +6,12 @@ from pathlib import Path
 import time
 import uuid
 
-import openai
 from openai import OpenAI
-import qdrant_client
 from qdrant_client import QdrantClient
-import qdrant_client.embed.embedder
 from qdrant_client.http import models as qmodels
 from qdrant_client.http.models import Distance, FieldCondition, Filter, MatchValue, ScoredPoint, VectorParams
 import subprocess
 
-import qdrant_client.embed
 import recommend.utils as utils
 
 
@@ -31,9 +27,16 @@ class VectorRecommendations:
         output_dir: str,
         duration_log_path: str,
         usage_log_path: str,
-        api_key: str, 
-        model: str = 'gpt-4o-mini',
+        chat_model: str,
+        chat_api_key: str,
+        embedding_hostname: str,
+        embedding_port: str,
+        embedding_model: str,
+        embedding_api_key: str,
+        hybrid_mode: bool = False,
         collection_name: str = 'sawra',
+        max_chunks: int = 50,
+        max_attempts: int = 5,
     ) -> None:
         # Initialize a duration logger
         self.duration_log_path = duration_log_path
@@ -58,27 +61,27 @@ class VectorRecommendations:
         self.workflow_str = utils.workflow_to_str(self.workflow)
         self.project_name = project_name
         self.target_paths = target_paths
-        self.scripts = self.__scripts()
+        self.hybrid_mode = hybrid_mode
         self.output_dir = output_dir
+        self.scripts = self.__scripts()
 
         # Load the requirements file
         self.requirements_path = requirements_path
         with open(self.requirements_path, 'r') as file:
             self.requirements = file.read().strip().split('\n')
 
-        # Initialize a model client and its metadata
-        self.api_key = api_key
-        self.model = model
-        self.embedding_model = 'text-embedding-ada-002'
-        self.client = OpenAI(api_key=self.api_key)
-
-        # Initialize a qdrant client and its metadata
-        self.qdrant = QdrantClient(host='localhost', port=6333, https=False)
+        # Initialize a chat model client and its metadata
+        self.chat_model = chat_model
+        self.client = OpenAI(api_key=chat_api_key)
+        self.max_attempts = max_attempts
+        
+        # Initialize an embedding model client and its metadata
+        self.embedding_model = embedding_model
+        self.qdrant = QdrantClient(host=embedding_hostname, port=embedding_port, api_key=embedding_api_key, https=False)
         self.collection_name = collection_name
-        self.max_chunks = 50
-        self.chunk_field = 'chunk'
         self.version = 'hybrid'
-        self.max_attempts = 5
+        self.chunk_field = 'chunk'
+        self.max_chunks = max_chunks
 
         # Load job prompt
         self.job_prompt_path = job_prompt_path
@@ -92,7 +95,6 @@ class VectorRecommendations:
 
         # Initialize miscellaneous paths
         self.output_dir = output_dir
-        self.model_workflow_path = os.path.join(self.output_dir, f'{self.workflow_name}.model.yaml')
 
     def __duration(func):
         def wrapper(self, *args, **kwargs):
@@ -120,13 +122,13 @@ class VectorRecommendations:
             
             # Get the inputs and dump it
             job_input = self.__inputs(script=script, target_name=target_name)
-            job_input_path = os.path.join(self.output_dir, f'{target_name}.inputs.hybrid.txt')
+            job_input_path = os.path.join(self.output_dir, f'{target_name}.job.hybrid.yaml' if self.hybrid_mode else f'{target_name}.inputs.vector.txt')
             with open(job_input_path, 'w') as file:
                 json.dump(job_input, file, indent=2)
 
             # Generate job blocks, or workflows for each job.
             job_block = self.__prompt(prompt=self.job_prompt, input=job_input)
-            job_path = os.path.join(self.output_dir, f'{target_name}.job.hybrid.yaml')
+            job_path = os.path.join(self.output_dir, f'{target_name}.job.hybrid.yaml' if self.hybrid_mode else f'{target_name}.job.vector.yaml')
             with open(job_path, 'w') as file:
                 file.write(job_block)
             job_blocks.append(job_block)
@@ -139,15 +141,18 @@ class VectorRecommendations:
             'jobs': job_blocks,
             'actionlint_errors': [],
         }
+        if self.hybrid_mode:
+            assemble_input['heuristic_yaml'] = self.workflow,
 
         # Attempt to assemble the workflow blocks multiple times
-        assembled_workflow = {}
+        assembled_workflow = ''
         for _ in range(self.max_attempts):
             # Sanitize and dump the assembled workflow
             assembled_workflow = self.__prompt(prompt=self.assemble_prompt, input=assemble_input)
             assembled_workflow = utils.sanitize_workflow(assembled_workflow)
-            assembled_path = os.path.join(self.output_dir, f'{self.workflow_name}.vector.yaml')
-            utils.dump_workflow(assembled_workflow, assembled_path)
+            assembled_path = os.path.join(self.output_dir, f'{self.workflow_name}.hybrid.yaml' if self.hybrid_mode else f'{self.workflow_name}.vector.yaml')
+            with open(assembled_path, 'w') as file:
+                file.write(assembled_workflow)
 
             # Add the lint errors to the input for the next iteration (if any)
             actionlint_error = self.__actionlint(assembled_path)
@@ -197,7 +202,7 @@ class VectorRecommendations:
     def __prompt(self, prompt: str, input: dict) -> str:
         """Prompt the LLM and pass it input data"""
         response = self.client.chat.completions.create(
-            model=self.model,
+            model=self.chat_model,
             temperature=0,
             messages=[
                 {'role': 'system', 'content': prompt},
@@ -257,9 +262,11 @@ class QdrantVectorizer:
         output_dir: str,
         duration_log_path: str,
         usage_log_path: str,
-        api_key: str,
+        embedding_hostname: str,
+        embedding_port: int,
+        embedding_api_key: str,
+        embedding_model: str,
         collection_name: str = 'sawra',
-        embedding_model: str = 'text-embedding-ada-002',
         chunk_size: int = 3000,
     ) -> None:
         # Initialize a duration logger
@@ -283,12 +290,12 @@ class QdrantVectorizer:
         self.output_dir = output_dir
 
         # Initialize embedding vector
-        self.openai_client = OpenAI(api_key=api_key)
-        self.qdrant_client = QdrantClient(host='localhost', api_key=api_key, port=6333, https=False)
+        self.openai_client = OpenAI(api_key=embedding_api_key)
+        self.qdrant_client = QdrantClient(host=embedding_hostname, port=embedding_port, api_key=embedding_api_key, https=False)
         self.collection_name = collection_name
         self.chunk_size = chunk_size
         self.embedding_model = embedding_model
-        self.api_key = api_key
+        self.embedding_api_key = embedding_api_key
     
     def __duration(func):
         def wrapper(self, *args, **kwargs):

@@ -20,7 +20,7 @@ class ModelRecommendations:
         duration_log_path: str,
         usage_log_path: str,
         api_key: str, 
-        model: str = 'gpt-4o-mini',
+        chat_model: str,
     ) -> None:
         # Initialize a duration logger
         self.duration_log_path = duration_log_path
@@ -48,7 +48,7 @@ class ModelRecommendations:
 
         # Initialize a model client and its metadata
         self.api_key = api_key
-        self.model = model
+        self.chat_model = chat_model
         self.client = OpenAI(api_key=self.api_key)
         
         # Load the model input data
@@ -85,7 +85,7 @@ class ModelRecommendations:
 
         # Prompt the model using the instructions and inputs
         response = self.client.chat.completions.create(
-            model=self.model,
+            model=self.chat_model,
             messages=[
                 {'role': 'system', 'content': self.instructions},
                 {'role': 'user', 'content': self.inputs},
@@ -109,7 +109,8 @@ class ModelRecommendations:
         workflow = utils.sanitize_workflow(workflow)
         
         # Dump and return the workflow
-        utils.dump_workflow(workflow, self.model_workflow_path)
+        with open(self.model_workflow_path, 'w') as file:
+            file.write(workflow)
         return workflow
     
     @__duration

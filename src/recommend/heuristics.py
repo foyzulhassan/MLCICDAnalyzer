@@ -121,8 +121,8 @@ class HeuristicRecommendations:
                 if recommendations[job_id]['timeout-minutes']:
                     workflow['jobs'][job_id]['timeout-minutes'] = recommendations[job_id]['timeout-minutes']
 
-                if recommendations[job_id]['working-directory']:
-                    workflow['jobs'][job_id]['defaults'] = {'run': recommendations[job_id]['working-directory']}
+                # if recommendations[job_id]['working-directory']:
+                #     workflow['jobs'][job_id]['defaults'] = {'run': recommendations[job_id]['working-directory']}
         if dump:
             utils.dump_workflow(workflow, self.heuristic_path)
         return workflow
@@ -164,9 +164,9 @@ class HeuristicRecommendations:
         for job_id in timeout_minutes:
             recommendations[job_id]['timeout-minutes'] = timeout_minutes[job_id]
 
-        working_directory = self.__working_directory()
-        for job_id in working_directory:
-            recommendations[job_id]['working-directory'] = working_directory[job_id]
+        # working_directory = self.__working_directory()
+        # for job_id in working_directory:
+        #     recommendations[job_id]['working-directory'] = working_directory[job_id]
 
         if dump:
             heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.recommendations')
@@ -179,6 +179,7 @@ class HeuristicRecommendations:
         """Get concurrency recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
+            recommendations[job_id] = None
             timestamps = self.timestamps[job_id]
             duration = max(timestamps) - min(timestamps) if timestamps else 0
             recommendations[job_id] = None
@@ -203,6 +204,7 @@ class HeuristicRecommendations:
         """Get fail-fast recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
+            recommendations[job_id] = None
             timestamps = self.timestamps[job_id]
             duration = max(timestamps) - min(timestamps) if timestamps else 0
             if duration >= self.recommendation_threshold['fail_fast']:
@@ -239,6 +241,7 @@ class HeuristicRecommendations:
         """Get output recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
+            recommendations[job_id] = None
             candidates = {env['key']: env['value'] for env in self.job_parses[job_id]['env']
                         if env['op'] == 'set' and '/' not in env['value'] and self.repository_dir in env['filename']}
             recommendations[job_id] = candidates if candidates else None
@@ -318,6 +321,7 @@ class HeuristicRecommendations:
         """Get timeout-minutes recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
+            recommendations[job_id] = None
             timestamps = self.timestamps[job_id]
             duration = max(timestamps) - min(timestamps) if timestamps else 0
             recommendations[job_id] = None

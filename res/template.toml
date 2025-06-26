@@ -1,5 +1,5 @@
 # ========================================================================== #
-#                                 REQUIRED                                   #
+#                                   TOOL                                     #
 # ========================================================================== #
 
 # name of the project
@@ -45,13 +45,11 @@ recommendation_multiplier = { timeout_minutes = 13 }
 #                                   LLM                                      #
 # ========================================================================== #
 
-# OpenAI API key for LLM interaction
-# - Missing: Model recommendations will be unavailable
-api_key = ""
+# OpenAI configuration
+openai = { chat_model = "gpt-4o-mini", embedding_model = "text-embedding-ada-002", api_key = "" }
 
-# OpenAI model name for LLM interaction
-# - Missing: Model recommendations will be unavailable
-model = "gpt-4o-mini"
+# Qdrant server configuration
+qdrant = { hostname = "localhost", port = "6333", api_key = "" }
 
 # ========================================================================== #
 #                                DEPRECATED                                  #
