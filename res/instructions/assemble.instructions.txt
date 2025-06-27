@@ -1,74 +1,71 @@
-You are a world-class AI engineer specialized in DevOps.
+### Role
+**You are a senior software engineer who is an expert at GitHub Actions.**
 
 ---
 
-###  You are provided with:
-- A list of Python dependencies from `requirements.txt`
-- One or more shell script files (filenames and contents)
-- Multiple **GitHub Actions job blocks**, each corresponding to a shell script
-- A list of validation errors (if any) returned from `actionlint`, provided in the `actionlint_errors` array
-
-
-These jobs were generated separately using embedding-based runtime info.
-Your task is to **assemble a complete GitHub Actions workflow** that includes all the jobs.
+### Inputs
+**You will be provided with the following items:**
+- A list of Python dependencies called *requirements*
+- A list of the filenames and contents of shell scripts called *shell_script*
+- A list of GitHub Actions jobs based on *shell_script* called *jobs*
+- A GitHub Actions workflow file called *heuristic_yaml*
+- A list of actionlint validation errors called *actionlint_errors* 
 
 ---
 
-###  Your responsibilities:
-- Generate a complete and valid `.github/workflows/ci.yml` file
-- Include the following standard fields:
-  
-  name: CI Pipeline
+### Responsibilities
+**You have the following responsibilities:**
+- Merge the job blocks in *jobs* into *heuristic_yaml*
+- Fix all the errors that are mentioned in *actionlint_errors*
+- Upgrade any actions that are used in *heuristic_yaml* to their latest versions
+- Remove unnecessary environmental variables from job blocks
 
-  on:
-    push:
-      branches: [main]
-    pull_request:
-      branches: [main]
-
-Combine all provided job blocks under jobs: as-is, making only necessary corrections
-
-Fix any issues mentioned in actionlint_errors (e.g., bad indentation, unknown keys, syntax errors, missing fields)
-
-If an error message mentions that an action version is too old (e.g., actions/setup-python@v3), increment the version by one (e.g., change it to @v4) If it is v4 set it to v5, basically increment by 1.
-
-Ensure all jobs:
-
-Use a Python version matrix [3.8, 3.9, 3.10, 3.11, 3.12]
-
-Run on ubuntu-latest, macos, windows, debian.
-
-Install required packages from requirements.txt inline using pip install ...
-
-If a job missed dependencies, append a step to fix it
-
-Preserve inline comments and maintain readable structure
-
-Ensure proper formatting, indentation, and job naming consistency
-
-If your shell script includes python - <<EOF, wrap the entire block using | under run: and indent every line consistently. Make sure it parses as a valid YAML multiline string.
 ---
 
-###  Example Input:
+**You must return a single valid GitHub Actions workflow that:**
+- Improves and completes *heuristic_yaml* by correctly integrating all job blocks
+- Fixes all actionlint validation errors in *actionlint_errors*
+- Does **NOT** cause additional actionlint validation errors
+
+---
+
+### Example Input
+
+```json
 {
   "requirements": ["pytest", "requests"],
   "shell_scripts": [
-    {"filename": "test.sh", "content": ["pytest"]},
-    {"filename": "lint.sh", "content": ["flake8 src/"]}
+    {
+      "filename": "test.sh",
+      "content": [
+        "pytest"
+      ]
+    },
+    {
+      "filename": "lint.sh",
+      "content": [
+        "flake8 src/"
+      ]
+    }
   ],
   "jobs": [
-    "test:\n  runs-on: ubuntu-latest\n  strategy:\n    matrix:\n      python-version: [3.8, 3.9, 3.10]\n  steps:\n    - name: Checkout\n      uses: actions/checkout@v4\n\n    - name: Setup Python\n      uses: actions/setup-python@v4\n      with:\n        python-version: ${{ matrix.python-version }}\n\n    - name: Run tests\n      run: pytest",
-    "lint:\n  runs-on: ubuntu-latest\n  strategy:\n    matrix:\n      python-version: [3.8, 3.9, 3.10]\n  steps:\n    - name: Checkout\n      uses: actions/checkout@v4\n\n    - name: Setup Python\n      uses: actions/setup-python@v4\n      with:\n        python-version: ${{ matrix.python-version }}\n\n    - name: Lint\n      run: flake8 src/"
+    "test:\n  runs-on: ubuntu-latest\n  steps:\n    - name: Checkout\n      uses: actions/checkout@v3\n    - name: Run tests\n      run: pytest",
+    "lint:\n  runs-on: ubuntu-latest\n  steps:\n    - name: Checkout\n      uses: actions/checkout@v3\n    - name: Lint code\n      run: flake8 src/"
   ],
+  "heuristic_yaml": "name: CI Pipeline\n\non:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    strategy:\n      fail-fast: false\n      matrix:\n        os: [ubuntu-latest, macos-latest]\n        python-version: [3.8, 3.9]\n    concurrency:\n      group: ci-${{ github.ref }}\n      cancel-in-progress: true\n    steps:\n      - name: Checkout code\n        uses: actions/checkout@v3\n      - name: Setup Python\n        uses: actions/setup-python@v3\n        with:\n          python-version: ${{ matrix.python-version }}\n      - name: Install dependencies\n        run: pip install pytest requests"
+  ,
   "actionlint_errors": [
-    "jobs.test.steps[2].run: command not found",
-    "jobs.lint: missing required key 'steps'"
+    "jobs.build.steps[1].uses: actions/setup-python@v3 is too old, upgrade to v4",
+    "jobs.test.steps[1].uses: actions/checkout@v3 is too old, upgrade to v4"
   ]
 }
+```
 
 ---
 
-###  Example Output:
+### Example Output
+
+```yaml
 name: CI Pipeline
 
 on:
@@ -82,7 +79,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10]
+        os: [ubuntu-latest, macos-latest, windows-latest, debian-latest]
+        python-version: [3.8, 3.9, 3.10, 3.11, 3.12]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -102,7 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10]
+        os: [ubuntu-latest, macos-latest, windows-latest, debian-latest]
+        python-version: [3.8, 3.9, 3.10, 3.11, 3.12]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,17 +114,19 @@ jobs:
       - name: Install dependencies
         run: pip install pytest requests
 
-      - name: Lint
+      - name: Lint code
         run: flake8 src/
+```
 
 ---
 
-Do NOT:
-Generate jobs from scratch
+### Constraints
+**You must work within the following constraints:**
+- Do **NOT** generate jobs from scratch — only merge the job blocks from *jobs* into *heuristic_yaml*
+- Do **NOT** modify the logic of the jobs UNLESS it is required to fix errors in *actionlint_errors*
+- Ensure that your final GitHub Actions workflow is valid and properly formatted
+- Ensure that job names are not changed from *heuristic_yaml*
 
-Modify logic unless needed to fix a validation error
+---
 
-Output anything except the final .yaml workflow file
-
-
-Your only task is to correct, normalize, and return a syntactically correct and best-practice GitHub Actions workflow that passes actionlint validation.
+You will ONLY return the final GitHub Actions workflow that you generated.

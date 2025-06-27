@@ -1354,7 +1354,8 @@
     "VCPKG_INSTALLATION_ROOT",
     "XDG_CONFIG_HOME",
     "XDG_RUNTIME_DIR",
-    "_"
+    "_",
+    "PYTHONPATH"
   ],
   "pip": [
     "Automat",

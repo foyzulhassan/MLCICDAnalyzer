@@ -2,159 +2,29 @@ You are an advanced AI model trained to generate precise, error-free, and best-p
 
 ---
 
-### **You will be given:**
-
-- One or more shell script files (both the filename and the actual contents of the script).
+### You will be given:
+- The filename and contents of one or more shell scripts.
 
 ---
 
 ### **The workflow must:**
-
-- Be named **CI Pipeline**.  
-- Trigger only on **push** and **pull requests** to the `main` branch.  
-- Run on **ubuntu-latest**.  
-- Convert the shell script(s) into GitHub Actions steps with **detailed comments** indicating which shell command corresponds to which GitHub Actions step.  
-- Create **separate jobs for each shell script**, with the **job name matching the shell script filename**.  
-- Use a **matrix strategy** for Python versions (**3.8, 3.9, 3.10**).  
-- Include **detailed comments** explaining how each step corresponds to the provided shell script.  
-- Be fully functional and ready to use **without requiring modifications**.  
+- Be named **CI Pipeline**
+- Create **separate jobs for each shell script**. The **job name must match the shell script filename without the extension**.
+- Be fully functional and ready to use.
 
 ---
 
 ### **The GitHub Actions workflow must:**  
-
-- Use `actions/checkout@v4` to check out the repository.  
-- Set up Python using `actions/setup-python@v4` with a matrix of versions (**3.8, 3.9, 3.10**).  
-- Translate each shell command into a corresponding GitHub Actions step with **inline comments** mapping to the shell script lines.  
-- Ensure each shell script is handled as a **separate job** named after the script (excluding the `.sh` extension).  
+- Ensure each shell script is handled as a **separate job** named after the script without the extension.
 
 ---
-
-### **Example Input JSON:**
-
-{
-  "shell_scripts": [
-    {
-      "filename": "coverage-combine.sh",
-      "content": [
-        "coverage combine /app/coverage",
-        "coverage report",
-        "coverage html --directory /app/coverage --title \"Coverage for $SHA\""
-      ]
-    },
-    {
-      "filename": "lint.sh",
-      "content": [
-        "bash /app/scripts/lint.sh"
-      ]
-    },
-    {
-      "filename": "test.sh",
-      "content": [
-        "pip install pydantic>=1.10.0,<2.0.0",
-        "mkdir -p /app/coverage",
-        "bash /app/scripts/test.sh"
-      ]
-    }
-  ]
-}
-
-
-### **Expected Output (`.github/workflows/ci.yml`):**
-
-
-name: CI Pipeline
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
-jobs:
-  coverage-combine:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.8, 3.9, 3.10]
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Run coverage combine
-        run: coverage combine /app/coverage
-        # Equivalent to: coverage combine /app/coverage in coverage-combine.sh
-
-      - name: Generate coverage report
-        run: coverage report
-        # Equivalent to: coverage report in coverage-combine.sh
-
-      - name: Generate HTML coverage report
-        run: coverage html --directory /app/coverage --title "Coverage for $SHA"
-        # Equivalent to: coverage html with title in coverage-combine.sh
-
-  lint:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.8, 3.9, 3.10]
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Run lint script
-        run: bash /app/scripts/lint.sh
-        # Equivalent to: bash /app/scripts/lint.sh in lint.sh
-
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.8, 3.9, 3.10]
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install pydantic dependency
-        run: pip install "pydantic>=1.10.0,<2.0.0"
-        # Equivalent to: pip install pydantic in test.sh
-
-      - name: Create coverage directory
-        run: mkdir -p /app/coverage
-        # Equivalent to: mkdir -p /app/coverage in test.sh
-
-      - name: Run test script
-        run: bash /app/scripts/test.sh
-        # Equivalent to: bash /app/scripts/test.sh in test.sh
-
 
 ### **Key Considerations:**  
-
-- Each shell script is converted into **one job** with the job name derived from the script filename.  
-- **Detailed comments** are included in each step to explain how the shell script commands map to the YAML workflow.  
-- Uses a **matrix strategy** to test across Python versions **3.8, 3.9, and 3.10**.  
-- The workflow is **deterministic** and ready to use **without any modifications**.  
+- Each shell script is converted into **one job** with the job name derived from the script filename.
+- The workflow is **deterministic** and ready to use **without any modifications**.
 
 ---
 
-### **Output Format:**  
-- **Only output the `.yml` file.**  
-- **Do not include explanations, notes, or extra text.**  
+### **Output Format:**
+- **Only output the `.yaml` file**.
 - Ensure **syntactic correctness**, **logical soundness**, and **full executability**.

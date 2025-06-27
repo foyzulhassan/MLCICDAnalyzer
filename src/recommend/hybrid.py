@@ -36,6 +36,7 @@ class VectorRecommendations:
         hybrid_mode: bool = False,
         collection_name: str = 'sawra',
         max_chunks: int = 50,
+        point_threshold: float = 0.60,
         max_attempts: int = 5,
     ) -> None:
         # Initialize a duration logger
@@ -82,6 +83,7 @@ class VectorRecommendations:
         self.version = 'hybrid'
         self.chunk_field = 'chunk'
         self.max_chunks = max_chunks
+        self.point_threshold = point_threshold
 
         # Load job prompt
         self.job_prompt_path = job_prompt_path
@@ -174,7 +176,9 @@ class VectorRecommendations:
         runtime_chunks = {}
         for trace_type in ['strace', 'ltrace', 'pyenv']:
             points = self.__top_chunks(project_name=self.project_name, target_name=target_name, trace_type=trace_type, embedding=embedding)
-            runtime_chunks[f"{target_name}.{trace_type}"] = [point.payload[self.chunk_field] for point in points]
+            filtered_points = [point for point in points if point.score >= self.point_threshold]
+            if filtered_points:
+                runtime_chunks[f"{target_name}.{trace_type}"] = [point.payload[self.chunk_field] for point in filtered_points]
 
         # Build the input and return it
         return \
@@ -326,7 +330,7 @@ class QdrantVectorizer:
         for trace_path, traced_values in summary.items():
             parsed = traced_values if isinstance(traced_values, list) else [f'"{k}": "{v}"' for k, v, in traced_values.items()]
             parsed = '\n'.join(parsed)
-            chunks = self.__chunk_text(parsed)
+            chunks = self.__chunk_text_line_aware(parsed)
 
             # Iterate through chunks and embed them
             for i, chunk in enumerate(chunks):
@@ -375,3 +379,17 @@ class QdrantVectorizer:
     def __chunk_text(self, text: str) -> list[str]:
         """Chunk the provided text based on the maximum chunk size"""
         return [text[i : i + self.chunk_size] for i in range(0, len(text), self.chunk_size)]
+
+    @__duration
+    def __chunk_text_line_aware(self, text: str) -> list[str]:
+        lines = text.splitlines()
+        chunks, current = [], ''
+        for line in lines:
+            if len(current) + len(line) + 1 <= self.chunk_size:
+                current += line + '\n'
+            else:
+                chunks.append(current.strip())
+                current = line + '\n'
+        if current:
+            chunks.append(current.strip())
+        return chunks

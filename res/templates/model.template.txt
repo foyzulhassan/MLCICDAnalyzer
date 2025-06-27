@@ -1,3 +1,3 @@
-The json having the list and content of the shell scripts  is given below: 
+The json having the list and content of the shell scripts is given below: 
 
 <<input_object_1>>
