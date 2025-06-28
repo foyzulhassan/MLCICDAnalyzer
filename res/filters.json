@@ -1226,7 +1226,8 @@
     "zlib1g-dev:amd64",
     "zlib1g:amd64",
     "zstd",
-    "zsync"
+    "zsync",
+    "ltrace"
   ],
   "env": [
     "ACCEPT_EULA",
@@ -1355,7 +1356,12 @@
     "XDG_CONFIG_HOME",
     "XDG_RUNTIME_DIR",
     "_",
-    "PYTHONPATH"
+    "LINES",
+    "TERMINAL_WIDTH",
+    "USERPROFILE",
+    "APPDATA",
+    "HOMEDRIVE",
+    "HOMEPATH"
   ],
   "pip": [
     "Automat",

@@ -69,12 +69,11 @@ class Workflow:
                 apt_str = ' '.join(self.job_parses[job_id]['apt'])
                 commands.append(f'apt install -y {apt_str}')
 
-            commands.append('python3 -m pip install --upgrade pip wheel setuptools')
             if self.has_requirements:
                 commands.append('if [ -f requirements.txt ]; then pip install -r requirements.txt; fi')
             if self.job_parses[job_id]['pip']:
                 pip_str = ' '.join(f'{module}=={version}' if version is not None else f'{module}' for module, version in self.job_parses[job_id]['pip'].items())
-                commands.append(f'pip install -I {pip_str}')
+                commands.append(f'pip install {pip_str}')
             if commands:
                 steps.append({'name': 'Install Dependencies', 'run': self.__multiline(commands)})
 

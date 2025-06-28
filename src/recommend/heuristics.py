@@ -16,7 +16,6 @@ class HeuristicRecommendations:
     def __init__(self,
                  workflow_path: str,
                  output_dir: str, 
-                 duration_log_path: str, 
                  repository_dir: str,
                  job_parses: dict,
                  step_mcdm_weights: list[float, float],
@@ -24,13 +23,6 @@ class HeuristicRecommendations:
                  recommendation_threshold: dict[str, float],
                  recommendation_multiplier: dict[str, float],
     ) -> None:
-        self.duration_log_path = duration_log_path
-        self.duration_logger = logging.getLogger(f'{__name__}.duration')
-        self.duration_logger.setLevel(logging.INFO)
-        self.duration_handler = logging.FileHandler(self.duration_log_path)
-        self.duration_handler.setFormatter(logging.Formatter('%(message)s'))
-        self.duration_logger.addHandler(self.duration_handler)
-
         self.workflow_path = workflow_path
         self.workflow = utils.load_workflow(self.workflow_path)
         self.workflow_name = Path(self.workflow_path).stem.split('.')[0]
@@ -46,18 +38,23 @@ class HeuristicRecommendations:
         self.recommendations_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.recommendations')
         self.heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.yaml')
 
-    def __duration(func):
+    def __log_duration(func):
+        """Decorator that logs the duration of the decorated function"""
         def wrapper(self, *args, **kwargs):
-            # Calculate the duration
+            # Calculate the duration of the caller
             start_time = time.time()
             result = func(self, *args, **kwargs) 
             end_time = time.time()
             duration = end_time - start_time
 
-            # Log the duration
-            source = 'heuristic'
-            function = str(func.__name__)
-            self.duration_logger.info(f'"{source}","{function}","{duration}"')
+            # Get the qualified name of the caller
+            filename = os.path.basename(__file__)
+            classname = 'HeuristicRecommendations'
+            qualname = f'{filename}.{classname}.{func.__name__}'
+
+            # Log the qualname and duration of the decorated function
+            message = f'"{qualname}","{start_time}","{end_time}","{duration}"'
+            logging.getLogger('duration').info(message)
             return result
         return wrapper
 
@@ -84,7 +81,7 @@ class HeuristicRecommendations:
 
         return timestamps
 
-    @__duration
+    @__log_duration
     def apply(self, dump: bool = False) -> dict:
         """Apply one or all recommendations to a workflow"""
         workflow = copy.deepcopy(self.workflow)
@@ -127,7 +124,7 @@ class HeuristicRecommendations:
             utils.dump_workflow(workflow, self.heuristic_path)
         return workflow
 
-    @__duration
+    @__log_duration
     def recommendations(self, dump: bool = False) -> dict:
         """Get all recommendations for a workflow"""
         recommendations = {job_id: {} for job_id in self.job_parses}
@@ -174,7 +171,7 @@ class HeuristicRecommendations:
                 json.dump(recommendations, file, indent=2)
         return recommendations
 
-    @__duration
+    @__log_duration
     def __concurrency(self) -> dict:
         """Get concurrency recommendations"""
         recommendations = {}
@@ -191,7 +188,7 @@ class HeuristicRecommendations:
                 }
         return recommendations
 
-    @__duration
+    @__log_duration
     def __env(self) -> dict:
         """Get environmental variables recommendations"""
         recommendations = {}
@@ -199,7 +196,7 @@ class HeuristicRecommendations:
             recommendations[job_id] = self.job_parses[job_id]['env'] if self.job_parses[job_id]['env'] else None
         return recommendations
 
-    @__duration
+    @__log_duration
     def __fail_fast(self) -> dict:
         """Get fail-fast recommendations"""
         recommendations = {}
@@ -211,7 +208,7 @@ class HeuristicRecommendations:
                 recommendations[job_id] = False
         return recommendations
 
-    @__duration
+    @__log_duration
     def __needs(self) -> tuple[dict, dict]:
         """Get needs recommendations"""
         needs = {}
@@ -236,7 +233,7 @@ class HeuristicRecommendations:
                     env[current_id][key] = f'${{needs.{previous_id}.outputs.{key}}}'
         return needs, env
 
-    @__duration
+    @__log_duration
     def __outputs(self) -> dict:
         """Get output recommendations"""
         recommendations = {}
@@ -247,7 +244,7 @@ class HeuristicRecommendations:
             recommendations[job_id] = candidates if candidates else None
         return recommendations
 
-    @__duration
+    @__log_duration
     def __steps(self) -> dict:
         """Get steps recommendations"""
         recommendations = {}
@@ -316,7 +313,7 @@ class HeuristicRecommendations:
                 recommendations[job_id].append({'run': step}) if step.strip() else None
         return recommendations
 
-    @__duration
+    @__log_duration
     def __timeout_minutes(self) -> dict:
         """Get timeout-minutes recommendations"""
         recommendations = {}
@@ -329,7 +326,7 @@ class HeuristicRecommendations:
                 recommendations[job_id] = (duration * self.recommendation_multiplier['timeout_minutes']) / 60 
         return recommendations
 
-    @__duration
+    @__log_duration
     def __working_directory(self) -> dict:
         """Get working-directory recommendations"""
         def __repository_paths() -> list[str]:

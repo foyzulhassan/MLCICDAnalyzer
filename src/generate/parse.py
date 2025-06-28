@@ -14,19 +14,11 @@ class ParseTrace:
     def __init__(self, 
                  target_path: str,
                  output_dir: str,
-                 duration_log_path: str,
                  requirements_path: str,
                  repository_dir: str,
                  filters_path: str,
                  new_trace: bool,
                  docker_path: str = None):
-        self.duration_log_path = duration_log_path
-        self.duration_logger = logging.getLogger(f'{__name__}.duration')
-        self.duration_logger.setLevel(logging.INFO)
-        self.duration_handler = logging.FileHandler(self.duration_log_path)
-        self.duration_handler.setFormatter(logging.Formatter('%(message)s'))
-        self.duration_logger.addHandler(self.duration_handler)
-
         self.target_path = target_path
         self.output_dir = output_dir
         self.requirements_path = requirements_path
@@ -48,22 +40,27 @@ class ParseTrace:
         self.paths = []
         self.parse_trace = {}
     
-    def __duration(func):
+    def __log_duration(func):
+        """Decorator that logs the duration of the decorated function"""
         def wrapper(self, *args, **kwargs):
-            # Calculate the duration
+            # Calculate the duration of the caller
             start_time = time.time()
             result = func(self, *args, **kwargs) 
             end_time = time.time()
             duration = end_time - start_time
 
-            # Log the duration
-            source = 'parse'
-            function = str(func.__name__)
-            self.duration_logger.info(f'"{source}","{function}","{duration}"')
+            # Get the qualified name of the caller
+            filename = os.path.basename(__file__)
+            classname = 'ParseTrace'
+            qualname = f'{filename}.{classname}.{func.__name__}'
+
+            # Log the qualname and duration of the decorated function
+            message = f'"{qualname}","{start_time}","{end_time}","{duration}"'
+            logging.getLogger('duration').info(message)
             return result
         return wrapper
 
-    @__duration
+    @__log_duration
     def parse(self, dump: bool = False) -> dict:
         """Parse all information from logs"""
         if self.new_trace or not os.path.isfile(self.parse_path):
@@ -75,6 +72,7 @@ class ParseTrace:
                 'pip': self.__pip(),
                 'script': self.__script(),
                 'versions': self.__versions(),
+                'paths': self.paths,
             }
             if dump:
                 with open(self.parse_path, 'w') as file:
@@ -88,7 +86,7 @@ class ParseTrace:
     #                                    STEPS                                #
     # ======================================================================= #
 
-    @__duration
+    @__log_duration
     def __apt(self) -> list[str]:
         """Parse apt packages that are unique to the strace log"""
         with open(self.apt_packages_path, 'r') as file:
@@ -104,7 +102,7 @@ class ParseTrace:
                             and ':' not in package)
         return used_packages
 
-    @__duration
+    @__log_duration
     def __env(self) -> dict:
         """Parse environmental variables from ltrace and pyenv"""
         env = []
@@ -144,12 +142,14 @@ class ParseTrace:
         env = {entry['key']: entry['value'] for entry in env \
                 if entry['key'] in used_keys \
                 and '/' not in entry['value'] \
+                and not entry['key'].startswith('_') \
+                and not entry['key'].startswith('PY') \
                 and entry['key'] not in self.filters['env'] \
                 and entry['key'] not in duplicate_keys \
                 and not duplicate_keys.add(entry['key'])}
         return env
 
-    @__duration
+    @__log_duration
     def __pip(self) -> dict:
         """Parse pip packages that are unqiue to the stract log"""
         # Identify explicit requirements in a pip requirements file
@@ -177,7 +177,7 @@ class ParseTrace:
         missing_requirements = {name: missing_requirements[name] for name in sorted(missing_requirements.keys()) if name not in self.filters['pip']}
         return missing_requirements
 
-    @__duration
+    @__log_duration
     def __script(self) -> str:
         """Read the target script"""
         with open(self.target_path, 'r') as file:
@@ -185,7 +185,7 @@ class ParseTrace:
         script = ''.join([line for line in script.splitlines(keepends=True) if line.strip() and not line.strip().startswith('#')])
         return script
 
-    @__duration
+    @__log_duration
     def __services(self):
         """Parse service contrainers"""
         docker_execs = [line.strip() for line in self.__script().splitlines() 
@@ -195,7 +195,7 @@ class ParseTrace:
                         or len([port for port in container['ports'] if port.split(':')[0] in self.__ports()]) > 0]
         return containers
 
-    @__duration
+    @__log_duration
     def __versions(self) -> list[str]:
         """Parse python versions from strace log"""
         versions = set()

@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 from pathlib import Path
 import subprocess
@@ -9,11 +10,10 @@ import toml
 
 from generate.trace import TraceTarget
 from generate.parse import ParseTrace
-from generate.summarize import summarize
 from generate.workflow import Workflow
 from recommend.heuristics import HeuristicRecommendations
 from recommend.model import ModelRecommendations
-from recommend.hybrid import VectorRecommendations, QdrantVectorizer
+from recommend.hybrid import HybridRecommendations, QdrantVectorizer
 
 
 TOOL_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -38,7 +38,6 @@ def apply_heuristic_recommendations(workflow_path: str, job_parses: dict):
     heuristic = HeuristicRecommendations(
         workflow_path=workflow_path,
         output_dir=CONFIG.output_dir,
-        duration_log_path=CONFIG.duration_log_path,
         repository_dir=CONFIG.repository_dir,
         job_parses=job_parses,
         step_mcdm_weights=CONFIG.step_mcdm_weights,
@@ -63,8 +62,6 @@ def apply_model_recommendations(workflow_path: str) -> dict:
         template_path=CONFIG.model_template_path,
         instruction_path=CONFIG.model_instruction_path,
         output_dir=CONFIG.output_dir,
-        duration_log_path=CONFIG.duration_log_path,
-        usage_log_path=CONFIG.usage_log_path,
         api_key=CONFIG.openai['api_key'],
         chat_model=CONFIG.openai['chat_model'])
     print_divider('MODEL', is_start=False, is_major=True)
@@ -78,9 +75,6 @@ def apply_hybrid_recommendations(workflow_path: str) -> tuple[dict, dict]:
     vectorizer = QdrantVectorizer(
         project_name=CONFIG.project_name,
         output_dir=CONFIG.output_dir,
-        
-        duration_log_path=CONFIG.duration_log_path,
-        usage_log_path=CONFIG.usage_log_path,
 
         embedding_hostname=CONFIG.qdrant['hostname'],
         embedding_port=CONFIG.qdrant['port'],
@@ -90,30 +84,26 @@ def apply_hybrid_recommendations(workflow_path: str) -> tuple[dict, dict]:
     vectorizer.vectorize()
     print_divider('VECTORIZE', is_start=False, is_major=False)
     print_divider('GENERATE', is_start=True, is_major=False)
-    vector = VectorRecommendations(
+    hybrid = HybridRecommendations(
         project_name=CONFIG.project_name,
         output_dir=CONFIG.output_dir,
-        hybrid_mode=True,
-
         workflow_path=workflow_path,
         requirements_path=CONFIG.requirements_path,
         target_paths=CONFIG.target_paths,
+
         assemble_prompt_path=CONFIG.assemble_prompt_path,
         job_prompt_path=CONFIG.job_prompt_path,
-
-        duration_log_path=CONFIG.duration_log_path,
-        usage_log_path=CONFIG.usage_log_path,
-        
         chat_model=CONFIG.openai['chat_model'],
         chat_api_key=CONFIG.openai['api_key'],
+        
         embedding_hostname=CONFIG.qdrant['hostname'],
         embedding_port=CONFIG.qdrant['port'],
         embedding_api_key=CONFIG.qdrant['api_key'],
         embedding_model=CONFIG.openai['embedding_model'])
-    vector_workflow = vector.apply()
+    hybrid_workflow = hybrid.apply()
     print_divider('GENERATE', is_start=False, is_major=False)
     print_divider('VECTOR', is_start=False, is_major=True)
-    return vector_workflow
+    return hybrid_workflow
 
 
 def get_job_parses() -> dict:
@@ -124,7 +114,6 @@ def get_job_parses() -> dict:
         target_name = Path(target_path).stem
         trace_target(target_path)
         job_parses[target_name] = parse_trace(target_path)
-    summarize(CONFIG.output_dir, CONFIG.filters_path)
     print_divider('MONITORING', is_start=False, is_major=True)
     return job_parses
 
@@ -136,7 +125,6 @@ def trace_target(target_path: str):
     trace = TraceTarget(
         target_path=target_path,
         output_dir=CONFIG.output_dir,
-        duration_log_path=CONFIG.duration_log_path,
         working_dir=CONFIG.working_dir,
         repository_dir=CONFIG.repository_dir,
         packages_path=CONFIG.packages_path,
@@ -153,7 +141,6 @@ def parse_trace(target_path: str):
     parse = ParseTrace(
         target_path=target_path,
         output_dir=CONFIG.output_dir,
-        duration_log_path=CONFIG.duration_log_path,
         requirements_path=CONFIG.requirements_path,
         repository_dir=CONFIG.repository_dir,
         filters_path=CONFIG.filters_path,
@@ -196,6 +183,27 @@ def print_divider(label: str, is_start: bool, is_major: bool = False):
         print(f" {round(time.time() - START_TIME, 1)}s ~ {'START' if is_start else 'END'} ~ {label.strip()} ".center(CONSOLE_WIDTH, '=' if is_major else '.'))
 
 
+def initialize_logging() -> None:
+    """Create loggers and initialize logs for all known metrics"""
+
+    def create_logger(path: str, metric: str):
+        """Create a logger for a particular metric"""
+        logger = logging.getLogger(metric)
+        assert not logger.hasHandlers()
+        handler = logging.FileHandler(path)
+        handler.setFormatter(logging.Formatter('%(message)s'))
+        logger.setLevel(logging.INFO)
+        logger.addHandler(handler)
+
+    with open(CONFIG.duration_log_path, 'w') as file:
+        file.write('qualname,start_time,end_time,duration\n')
+    create_logger(CONFIG.duration_log_path, 'duration')
+
+    with open(CONFIG.cost_log_path, 'w') as file:
+        file.write('qualname,prompt_tokens,completion_tokens,total_tokens\n')
+    create_logger(CONFIG.cost_log_path, 'cost')
+
+
 def parse_config(config_path: str, new_trace: bool = False):
     """Parse options from a configuration file"""
     class Config(dict):
@@ -213,7 +221,7 @@ def parse_config(config_path: str, new_trace: bool = False):
     config_dict['assemble_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'assemble.instructions.txt')
     config_dict['job_prompt_path'] = os.path.join(RES_DIR, 'instructions', 'job.instructions.txt')
     config_dict['duration_log_path'] = os.path.join(config_dict['output_dir'], 'duration.log')
-    config_dict['usage_log_path'] = os.path.join(config_dict['output_dir'], 'usage.log')
+    config_dict['cost_log_path'] = os.path.join(config_dict['output_dir'], 'cost.log')
     return Config(config_dict)
 
 
@@ -224,6 +232,7 @@ def parse_args():
     parser.add_argument('-m', '--use-model', dest='use_model', action='store_true', help='whether to use LLM recommendations')
     parser.add_argument('-n', '--new-trace', dest='new_trace', action='store_true', help='whether to trace the target again and override existing artifacts')
     parser.add_argument('-q', '--quiet', dest='quiet', action='store_true', help='whether to print stage markers')
+    parser.add_argument('--method', default='all', const='all', nargs='?', choices=['simple', 'hybrid', 'all'], help='the method to use to generate the workflow (default: %(default)s)')
     parser.add_argument('--new-config', dest='new_config', type=str, default=None, help='path to directory to generate a new configuration file template')
     parser.add_argument('--no-artifacts', dest='no_artifacts', action='store_true', help='whether keep non-yaml artifacts that the tool produces')
     return parser.parse_args()
@@ -245,11 +254,8 @@ def main():
     global CONFIG
     CONFIG = parse_config(ARGS.config_path, ARGS.new_trace)
 
-    # Reset the logs
-    with open(CONFIG.duration_log_path, 'w') as file:
-        file.write('source,function,duration\n')
-    with open(CONFIG.usage_log_path, 'w') as file:
-        file.write('source,purpose,prompt_tokens,completion_tokens,total_tokens\n')
+    # Initialize the logging system
+    initialize_logging()
 
     # Start the timer
     global START_TIME
@@ -264,8 +270,10 @@ def main():
     generate_base_workflow(job_parses)
     apply_heuristic_recommendations(workflow_path=base_path, job_parses=job_parses)
     if CONFIG.openai['api_key'] and CONFIG.qdrant['api_key'] and ARGS.use_model:
-        apply_model_recommendations(heuristic_path)
-        apply_hybrid_recommendations(heuristic_path)
+        if ARGS.method in ('all', 'simple'):
+            apply_model_recommendations(heuristic_path)
+        if ARGS.method in ('all', 'hybrid'):
+            apply_hybrid_recommendations(heuristic_path)
 
     # Check whether to remove artifacts besides yaml files
     if ARGS.no_artifacts:

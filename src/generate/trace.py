@@ -15,19 +15,11 @@ class TraceTarget:
     def __init__(self, 
                  target_path: str, 
                  output_dir: str,
-                 duration_log_path: str,
                  repository_dir: str,
                  working_dir: str,
                  packages_path: str,
                  patch_dir: str,
                  new_trace: bool):
-        self.duration_log_path = duration_log_path
-        self.duration_logger = logging.getLogger(f'{__name__}.duration')
-        self.duration_logger.setLevel(logging.INFO)
-        self.duration_handler = logging.FileHandler(self.duration_log_path)
-        self.duration_handler.setFormatter(logging.Formatter('%(message)s'))
-        self.duration_logger.addHandler(self.duration_handler)
-
         self.target_path = target_path
         self.output_dir = output_dir
         self.repository_dir = repository_dir
@@ -46,22 +38,27 @@ class TraceTarget:
         self.pyenv_path = os.path.join(self.output_dir, f'{self.target_name}.pyenv')
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def __duration(func):
+    def __log_duration(func):
+        """Decorator that logs the duration of the decorated function"""
         def wrapper(self, *args, **kwargs):
-            # Calculate the duration
+            # Calculate the duration of the caller
             start_time = time.time()
             result = func(self, *args, **kwargs) 
             end_time = time.time()
             duration = end_time - start_time
 
-            # Log the duration
-            source = 'trace'
-            function = str(func.__name__)
-            self.duration_logger.info(f'"{source}","{function}","{duration}"')
+            # Get the qualified name of the caller
+            filename = os.path.basename(__file__)
+            classname = 'TraceTarget'
+            qualname = f'{filename}.{classname}.{func.__name__}'
+
+            # Log the qualname and duration of the decorated function
+            message = f'"{qualname}","{start_time}","{end_time}","{duration}"'
+            logging.getLogger('duration').info(message)
             return result
         return wrapper
 
-    @__duration
+    @__log_duration
     def trace(self):
         """Instrument and trace a target script with strace and ltrace"""
         if self.new_trace or not os.path.isfile(self.timestamps_target_path):
@@ -75,7 +72,7 @@ class TraceTarget:
         if self.new_trace or not os.path.isfile(self.apt_packages_path):
             self.__apt_packages(dump=True, verbose=True)
 
-    @__duration
+    @__log_duration
     def __strace(self, target_path: str = None) -> int:
         """Execute and trace an instrumented target script with strace"""
         target_path = self.target_path if target_path is None else target_path
@@ -85,7 +82,7 @@ class TraceTarget:
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
 
-    @__duration
+    @__log_duration
     def __ltrace(self, target_path: str = None) -> int:
         """Execute and trace an instrumented target script with ltrace"""
         target_path = self.target_path if target_path is None else target_path
@@ -96,7 +93,7 @@ class TraceTarget:
         result = subprocess.run(commands_str, shell=True)
         return result.returncode
 
-    @__duration
+    @__log_duration
     def __working_directory(self, commands: list[str]) -> list[str]:
         """Add commands to return to the tool environment after tracing the target"""
         wrapper = []
@@ -106,7 +103,7 @@ class TraceTarget:
         wrapper.append('cd $PREVIOUS_WORKING_DIRECTORY')
         return wrapper
 
-    @__duration
+    @__log_duration
     def __python_env(self, commands: list[str]) -> list[str]:
         """Add commands to get the environment variable accesses in python scripts"""
         wrapper = []
@@ -116,7 +113,7 @@ class TraceTarget:
         wrapper.extend(commands)
         return wrapper
 
-    @__duration
+    @__log_duration
     def __timestamp(self, target_path: str = None, dump: bool = False) -> str:
         """Timestamp unnested executable lines and blocks in target script"""
         # Load the target script
@@ -153,7 +150,7 @@ class TraceTarget:
                 file.write(timestamp_target)
         return timestamp_target
 
-    @__duration
+    @__log_duration
     def __pip_packages(self, dump: bool = False, verbose: bool = False):
         """Add commands to get the installed pip packages in the target environment"""
         process = subprocess.run('pip freeze  | sed s/=.*//', capture_output=True, text=True, shell=True)
@@ -171,7 +168,7 @@ class TraceTarget:
                 json.dump(packages, file, indent=2)
         return packages
 
-    @__duration
+    @__log_duration
     def __apt_packages(self, dump: bool = False, verbose: bool = False):
         """Add commands to get the installed apt packages in the target environment"""
         process = subprocess.run('dpkg --get-selections | grep -v deinstall', capture_output=True, text=True, shell=True)
