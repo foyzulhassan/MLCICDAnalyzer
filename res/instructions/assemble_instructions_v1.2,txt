@@ -193,6 +193,3 @@ Use `strace` data to infer environmental setup, required operating systems, Pyth
 * Only include operating systems and Python versions justified by observed runtime behavior
 
 ---
-
-Let me know if you want a condensed variant for quick reference or inline comments to explain logic to model developers.
-
