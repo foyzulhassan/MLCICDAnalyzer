@@ -1,0 +1,66 @@
+Trace Mapping Guidelines
+Use the runtime trace information to enhance the generated job blocks in the following ways:
+
+strace
+Use strace data to infer environmental setup, required operating systems, Python versions, and additional steps:
+
+Operating System Detection
+
+Inspect system-level paths to determine OS:
+
+/usr/bin/apt, /etc/os-release → ubuntu-latest
+
+/usr/local/bin/brew, /System/Library → macos-latest
+
+C:\\Program Files, cmd.exe → windows-latest
+
+Python Version Detection
+
+Add Python versions to the matrix based on observed paths:
+
+E.g., /usr/lib/python3.11/ → add '3.11' to python-version matrix
+
+Filesystem Access
+
+If mkdir, open, or write calls access specific paths (e.g., /tmp/reports/, /var/log/), inject:
+
+Directory creation steps if needed
+
+Artifact upload steps if outputs are generated
+
+Binary or Tool Access
+
+If tools like curl, wget, flake8, or git are executed:
+
+Ensure they are installed or available in the runner
+
+Inject apt install or pip install if missing and not in requirements
+
+Missing Binaries (ENOENT)
+
+Detect failed execve or file open operations due to missing tools
+
+Automatically add setup steps for those tools
+
+Command Structure Optimization
+
+Use syscall ordering (e.g., mkdir → open → write) to structure steps logically
+
+Group setup actions into a Setup Environment step
+
+Group file manipulations together
+
+ltrace
+Extract environment variables accessed outside Python (e.g., used in compiled binaries)
+
+Add them to the env: block of the job to ensure correct execution context
+
+pyenv
+Extract environment variables used only inside Python
+
+These can optionally be echoed before running Python commands, or injected as env: if relevant for test configuration
+
+General Rules
+Do not inject variables or tools unless confirmed by trace data
+
+Only include operating systems and Python versions justified by observed runtime behavior
