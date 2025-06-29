@@ -1,5 +1,6 @@
 from io import StringIO
 import os
+import re
 import textwrap
 
 import ruamel.yaml
@@ -62,8 +63,9 @@ class Workflow:
         """Add python dependency installation to job configurations"""
         for job_id in self.job_ids:
             commands = []
+            action = 'astral-sh/setup-uv@v6' if re.match(r'\buv\b', self.job_parses[job_id]['script']) else 'actions/setup-python@v5'
             steps = self.yaml['jobs'][job_id]['steps']
-            steps.append({'uses': 'actions/setup-python@v5', 'with': {'python-version': '${{ matrix.python-version }}', 'cache': 'pip'}})
+            steps.append({'uses': action, 'with': {'python-version': '${{ matrix.python-version }}'}})
 
             if self.job_parses[job_id]['apt']:
                 apt_str = ' '.join(self.job_parses[job_id]['apt'])

@@ -107,11 +107,11 @@ class HybridRecommendations:
         # Get the blocks for each job (i.e. target script)
         job_blocks = []
         for script in self.scripts:
-            job_name = Path(script['filename']).stem
+            job_name = Path(script['script_name']).stem
             
             # Get the inputs and dump it
             job_input = self.__get_job_inputs(script=script, job_name=job_name)
-            job_input_path = os.path.join(self.output_dir, f'{job_name}.job.hybrid.yaml')
+            job_input_path = os.path.join(self.output_dir, f'{job_name}.job.input.hybrid.yaml')
             with open(job_input_path, 'w') as file:
                 json.dump(job_input, file, indent=2)
 
@@ -119,18 +119,19 @@ class HybridRecommendations:
             job_block = self.__prompt(prompt=self.job_prompt, input=job_input)
             job_path = os.path.join(self.output_dir, f'{job_name}.job.hybrid.yaml')
             with open(job_path, 'w') as file:
-                file.write(job_block)
+                json.dump(job_block, file, indent=2)
             job_blocks.append(job_block)
 
         # Build the input for job block assembly
         assemble_input = \
         {
-            'base_workflow': self.workflow,
-            'bash_scripts': self.scripts,
-            'python_requirements': self.requirements,
             'job_blocks': job_blocks,
-            'actionlint_errors': [],
+            'actionlint_errors': None,
         }
+        assemble_input_path = os.path.join(self.output_dir, f'{self.workflow_name}.assemble.input.hybrid.yaml')
+        with open(assemble_input_path, 'w') as file:
+            assemble_input_str = json.dumps(assemble_input, indent=2).strip()
+            file.write(assemble_input_str)
 
         # Attempt to assemble the workflow blocks multiple times
         assembled_workflow = ''
@@ -144,8 +145,11 @@ class HybridRecommendations:
 
             # Add the lint errors to the input for the next iteration (if any)
             actionlint_error = self.__check_actionlint(assembled_path)
-            if actionlint_error is not None:
-                assemble_input['actionlint_errors'].append(actionlint_error)
+            if actionlint_error:
+                assemble_input['actionlint_errors'] = actionlint_error
+                with open(assemble_input_path, 'a') as file:
+                    assemble_input_str = json.dumps(assemble_input, indent=2).strip()
+                    file.write(f'\n\n\n---\n\n\n{assemble_input_str.strip()}')
             else:
                 break
         return assembled_workflow
@@ -155,22 +159,26 @@ class HybridRecommendations:
         """Get the job input data that will be passed to the model"""
 
         # Get the embedding for the target script
-        content = '\n'.join(script['content'])
+        content = '\n'.join(script['script_content'])
         embedding = self.__get_embeddings(content)
 
         # Get the runtime chunks for a runtime script
         runtime_chunks = {}
-        for chunk_type in ['apt', 'env', 'paths', 'pip', 'python_versions']:
+        for chunk_type in ['apt', 'env', 'pip', 'python_versions', 'duration', 'paths']:
             points = self.__get_top_chunks(project_name=self.project_name, job_name=job_name, chunk_type=chunk_type, embedding=embedding)
             filtered_points = [point for point in points if point.score >= self.point_threshold]
             if filtered_points:
-                runtime_chunks[f"{job_name}.{chunk_type}"] = [point.payload[self.chunk_field] for point in filtered_points]
+                if job_name not in runtime_chunks:
+                    runtime_chunks[job_name] = {}
+                runtime_chunks[job_name][chunk_type] = [point.payload[self.chunk_field] for point in filtered_points]
 
         # Build the input and return it
+        base_job_block = utils.workflow_to_str({job_name: self.workflow['jobs'][job_name]}).strip()
         return \
         {
-            'bash_script': script, 
-            'python_requirements': self.requirements, 
+            'base_job_block': f"```yaml\n{base_job_block}\n```",
+            'bash_script': script,
+            'python_requirements': self.requirements,
             'runtime_chunks': runtime_chunks,
         }
     
@@ -183,7 +191,7 @@ class HybridRecommendations:
             query_filter=Filter(must=[
                 FieldCondition(key='project_name', match=MatchValue(value=project_name)),
                 FieldCondition(key='job_name', match=MatchValue(value=job_name)),
-                FieldCondition(key='chunk_type', match=MatchValue(value=chunk_type))
+                FieldCondition(key='chunk_type', match=MatchValue(value=chunk_type)),
             ]),
             limit=self.max_chunks,
             with_payload=True)
@@ -220,12 +228,20 @@ class HybridRecommendations:
         """Load target scripts and their metadata"""
         scripts = []
         for path in self.target_paths:
+            script_name = Path(path).stem
+
             with open(path, 'r') as file:
-                content = file.read()
+                script_content = file.read().strip().split('\n')
+
+            parse_path = os.path.join(self.output_dir, f'{script_name}.parse')
+            with open(parse_path, 'r') as file:
+                script_duration = json.load(file)['duration']
+
             script = \
             {
-                'filename': Path(path).name, 
-                'content': content.strip().split('\n'),
+                'script_name': script_name, 
+                'script_content': script_content,
+                'script_duration': script_duration,
             }
             scripts.append(script)
         return scripts
@@ -312,11 +328,18 @@ class QdrantVectorizer:
             summary[f'{job_name}.env'] = parse['env']
             summary[f'{job_name}.pip'] = parse['pip']
             summary[f'{job_name}.python_versions'] = parse['versions']
+            summary[f'{job_name}.duration'] = parse['duration']
             summary[f'{job_name}.paths'] = parse['paths']
 
         # Iterate through traces, chunk them, and embed them
         for trace_path, traced_values in summary.items():
-            parsed = traced_values if isinstance(traced_values, list) else [f'"{k}": "{v}"' for k, v, in traced_values.items()]
+            # Get the chunks
+            if isinstance(traced_values, dict):
+                parsed = [f'"{k}": "{v}"' for k, v, in traced_values.items()]
+            elif isinstance(traced_values, list):
+                parsed = [str(value) for value in traced_values]
+            else:
+                parsed = [str(traced_values)]
             parsed = '\n'.join(parsed)
             chunks = self.__chunk_text(text=parsed, line_aware=True)
 
@@ -329,7 +352,7 @@ class QdrantVectorizer:
                     'project_name': self.project_name,
                     'job_name': Path(trace_path).stem,
                     'chunk_id': i,
-                    'chunk_type': Path(trace_path).suffix,
+                    'chunk_type': Path(trace_path).suffix[1:],
                     'chunk_content': chunk,   
                 }
                 self.qdrant_client.upsert \

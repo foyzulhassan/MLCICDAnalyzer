@@ -2,6 +2,7 @@ TOOL_NAME = sawra
 PY_VERSION = 3.10
 
 install:
+	rm -f dist/sawra.tar.gz
 	pyinstaller \
 		--name "sawra" \
 		--clean \

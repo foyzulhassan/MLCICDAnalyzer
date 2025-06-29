@@ -72,6 +72,7 @@ class ParseTrace:
                 'pip': self.__pip(),
                 'script': self.__script(),
                 'versions': self.__versions(),
+                'duration': self.__duration(),
                 'paths': self.paths,
             }
             if dump:
@@ -101,6 +102,30 @@ class ParseTrace:
                             and 'python' not in package \
                             and ':' not in package)
         return used_packages
+    
+    @__log_duration
+    def __duration(self) -> dict:
+        """Parse the duration of the script from the strace log"""
+
+        def is_numeric(value) -> float | None:
+            """Check whether a value is a number"""
+            try:
+                return float(value)
+            except ValueError:
+                return None
+
+        # Get the timestamps in the strace log
+        timestamps = []
+        with open(self.strace_path, 'r') as log:
+            for entry in log:
+                value = entry.split(maxsplit=2)[1]
+                value = is_numeric(value)
+                if value is not None:
+                    timestamps.append(value)
+
+        # Get the duration from the timestamps and return it
+        duration = max(timestamps) - min(timestamps) if timestamps else None
+        return duration
 
     @__log_duration
     def __env(self) -> dict:

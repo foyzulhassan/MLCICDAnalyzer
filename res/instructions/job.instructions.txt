@@ -1,27 +1,59 @@
 ### Role
+
 **You are a senior software engineer who is an expert at GitHub Actions.**
 
 ---
 
 ### Inputs
-**You will be provided with the following items:**
-- A dictionary containing the filename and content of a single shell script called *shell_script*
-- A list of Python dependencies called *requirements*
-- A dictionary of runtime information chunks called *runtime_chunks* that contains the following items:
-  - A list of all the paths that the shell script accesses when executed called *strace*
-  - A dictionary containing all the environmental variables that are accessed outside python scripts called *ltrace*
-  - A dictionary containing all the environmental variables that are **NOT** accessed outside python scripts called *pyenv*
+
+**You will be provided with a JSON object that contains the following items:**
+- **base_job_block** is a single job block from a GitHub Actions workflow.
+- **bash_script** is a JSON object that represents a bash script. Its runtime information was used to generate **base_job_block**. It contains the following items:
+  - **script_name** is the name of the bash script.
+  - **script_content** is the content of the bash script.
+  - **script_duration** is the duration of the bash script in seconds.
+- **python_requirements** is a list of python dependencies that **bash_script** explicitly depends on.
+- **runtime_chunks** is a JSON object that represents runtime information related to the **bash_script** and contains the following items:
+  - **apt** is a list of the apt packages that accessed by **bash_script**.
+  - **env** is a JSON of environmental variables that were accessed by **bash_script**.
+  - **pip** is a list of python packages that were accessed by **bash_script**.
+  - **python_versions** is a list of python versions that **bash_script** used.
+  - **duration** is the duration of **bash_script** in seconds.
+  - **paths** is a list of paths that were accessed by **bash_script**.
 
 ---
 
-### Job Block Constraints
-**You will generate a single job block for a GitHub Actions workflow file with the following constraints:**
-- The job block must be named after the filename in *shell_script* (excluding *.sh*)
-- The job block must include a matrix configuration called *os* that contains a list of operating systems that are valid GitHub Actions runners. ONLY include the operating systems that would need to be tested based on the paths in *strace*
-- The job block must include a matrix configuration called *python-version* that contains a list of python versions. Only include the python versions that would need to be tested based on the paths in *strace*
-- The lines in the shell script should be split into a sequence of GitHub Actions steps. Related lines should be included in the same step
-- The information in *runtime_chunks* should be used to add GitHub Actions syntax to the job and improve its robustness
-- Install python dependencies that are missing in *requirements* **inline** using `pip install ...` from the requirements
+### Responsibilities
+
+**You must use the input to improve the **base_job_block**. To do this, you must complete the following tasks:**
+- Update all actions in **base_job_block** to their latest versions (e.g. change ```yaml\nuses: actions/setup-python@v2``` to ```yaml\nuses: actions/setup-python@v5```).
+- Remove unnecessary environmental variables from env blocks in **base_job_block** (e.g. change ```yaml\nenv:\n  HOSTNAME: root\n  MIN_LEVEL: 3``` to ```yaml\nenv:\n  MIN_LEVEL: 3```).
+- Add GitHub Action syntax elements to **base_job_block** that would improve it.
+- Remove GitHub Action syntax elements from **base_job_block** that are unnecessary or worsen it.
+- Update the values of existing GitHub Action syntax elements in **base_job_block** to improve it.
+- Focus on improvements to the following GitHub Action syntax elements: **env**, **timeout-minutes**, **continue-on-error**, **fail-fast**, **concurrency**, **matrix**.
+- Install python dependencies that are missing in **python_requirements** in a single line (e.g. pip install tensorflow==2.19.0).
+- Install apt packages that are not in **ubuntu-latest** by default and are not automatically installed by **script_content** as indicated by **runtime_chunks** (e.g. apt install ffmpeg).
+
+---
+
+### Constraints
+
+**You must complete your tasks within the following constraints to improve the **base_job_block**:
+- **DO NOT** change the name of the job.
+- **DO NOT** change the content and order of lines in the run blocks in **base_job_block**.
+- **DO NOT** make changes to **base_job_block** that would cause it to fail.
+- **DO NOT** output anything except the job block.
+- **DO NOT** add any syntax outside the job block.
+- **DO NOT** add additional jobs.
+- **DO NOT** add an entire GitHub Actions workflow.
+- **DO NOT** produce an invalid or improperly formatted job block.
+
+---
+
+### Outputs
+
+**You must ONLY return your improved version of **base_job_block**. Do **NOT** return any additional notes or explanations.**
 
 ---
 
@@ -29,23 +61,43 @@
 
 ```json
 {
-  "shell_script": {
-    "filename": "test.sh",
-    "content": [
-      "mkdir -p reports",
-      "pytest tests/"
-    ]
-  },
-  "requirements": ["pytest", "requests"],
-  "runtime_chunks": {
-    "strace": [
-      "mkdir -p reports\nwrite to /reports/\nopen('tests/test_main.py')"
+  "base_job_block": "```yaml\ntests:\n  runs-on: ubuntu-latest\n  steps:\n    - name: Checkout\n      uses: actions/checkout@v3\n    - name: Run tests\n      run: pytest```",
+  "bash_script": {
+    "script_name": "tests",
+    "script_content": [
+      "pytest",
     ],
-    "ltrace": {
-      "JAX_SKIP_SLOW_TESTS": "true",\n"JAX_NUM_GENERATED_CASES": "1"
-    }
-    "pyenv": {
-      "JAX_ENABLE_CHECKS": "true",\n"JAX_ENABLE_X64": "0"
+    "script_duration": 77.42234802246094
+  },
+  "python_requirements": [
+    "Brotli>=1.1.0",
+    "certifi>=2025.6.15",
+    "mutagen>=1.47.0",
+    "pycryptodomex>=3.23.0",
+    "requests>=2.32.4",
+    "urllib3>=2.4.0",
+    "websockets>=15.0.1"
+  ],
+  "runtime_chunks": {
+    "tests": {
+      "apt": [
+        "mailcap\nunixodbc-common"
+      ],
+      "env": [
+        "\"EX_ENV\": \"true\"\n\"HTTP_PROXY\": \"__noproxy__\"\n\"NO_PROXY\": \"127.0.0.1,foo.bar\"\n\"HTTPS_PROXY\": \"example.com\"\n\"example_EXPATH_PATH\": \"expanded\""
+      ],
+      "pip": [
+        "\"curl_cffi\": \"0.10.0\""
+      ],
+      "python_versions": [
+        "3.13"
+      ],
+      "duration": [
+        "77.42234802246094"
+      ],
+      "paths": [
+        "/app/example/__pycache__\n/app/example/__pycache__/YoutubeDL.cpython-313.pyc\n/app/example/__pycache__/YoutubeDL.cpython-313.pyc.137502879018864",
+      ]
     }
   }
 }
@@ -56,43 +108,21 @@
 ### Example Output:
 
 ```yaml
-jax2tf_test:
+test:
   runs-on: ${{ matrix.os }}
   strategy:
     matrix:
       os: [ubuntu-latest]
-      python-version: ['3.11']
+      python-version: [3.10, 3.11, 3.12]
   steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        cache: pip
-    - name: Install Dependencies
-      run: |
-        pip install tensorflow==2.19.0
-    - run: |
-        echo "JAX_NUM_GENERATED_CASES=$JAX_NUM_GENERATED_CASES"
-    - run: |
-        echo "JAX_ENABLE_X64=$JAX_ENABLE_X64"
-        echo "JAX_ENABLE_CHECKS=$JAX_ENABLE_CHECKS"
-        echo "JAX_SKIP_SLOW_TESTS=$JAX_SKIP_SLOW_TESTS"
-        pytest -n auto --tb=short --maxfail=20 jax/experimental/jax2tf/tests/jax2tf_test.py
-  env:
-    JAX_ENABLE_X64: '0'
-    JAX_ENABLE_CHECKS: 'true'
-    JAX_NUM_GENERATED_CASES: '10'
-    JAX_SKIP_SLOW_TESTS: 'true'
+    - name: Install dependencies
+      run: pip install pytest requests
+    - name: Run tests
+      run: pytest
 ```
-
----
-
-### OUTPUT CONSTRAINTS
-**You must work within the following constraints:**
-- Do **NOT** output anything EXCEPT the job block
-- Do **NOT** add any syntax outside the job block
-- Do **NOT** add any markdown, notes, or explanations
-
----
-
-**You will ONLY return the YAML block for one job.**
