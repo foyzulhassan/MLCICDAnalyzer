@@ -51,7 +51,7 @@ class Workflow:
         for job_id in self.job_ids:
             job = self.yaml['jobs'][job_id]
             python_versions = self.job_parses[job_id]['versions']
-            job.update({'strategy': {'matrix': {'os': 'ubuntu-latest', 'python-version': python_versions}}})
+            job.update({'strategy': {'matrix': {'os': ['ubuntu-latest'], 'python-version': python_versions}}})
 
     def __checkout(self):
         """Add checkout action to job configurations"""
@@ -63,7 +63,7 @@ class Workflow:
         """Add python dependency installation to job configurations"""
         for job_id in self.job_ids:
             commands = []
-            action = 'astral-sh/setup-uv@v6' if re.match(r'\buv\b', self.job_parses[job_id]['script']) else 'actions/setup-python@v5'
+            action = 'astral-sh/setup-uv@v5' if re.match(r'\buv\b', self.job_parses[job_id]['script']) else 'actions/setup-python@v5'
             steps = self.yaml['jobs'][job_id]['steps']
             steps.append({'uses': action, 'with': {'python-version': '${{ matrix.python-version }}'}})
 
@@ -71,8 +71,6 @@ class Workflow:
                 apt_str = ' '.join(self.job_parses[job_id]['apt'])
                 commands.append(f'apt install -y {apt_str}')
 
-            if self.has_requirements:
-                commands.append('if [ -f requirements.txt ]; then pip install -r requirements.txt; fi')
             if self.job_parses[job_id]['pip']:
                 pip_str = ' '.join(f'{module}=={version}' if version is not None else f'{module}' for module, version in self.job_parses[job_id]['pip'].items())
                 commands.append(f'pip install {pip_str}')
