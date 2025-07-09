@@ -63,7 +63,8 @@ class Workflow:
         """Add python dependency installation to job configurations"""
         for job_id in self.job_ids:
             commands = []
-            action = 'astral-sh/setup-uv@v5' if re.match(r'\buv\b', self.job_parses[job_id]['script']) else 'actions/setup-python@v5'
+            is_uv = re.match(r'\buv\b', self.job_parses[job_id]['script']) is not None
+            action = 'astral-sh/setup-uv@v5' if is_uv else 'actions/setup-python@v5'
             steps = self.yaml['jobs'][job_id]['steps']
             steps.append({'uses': action, 'with': {'python-version': '${{ matrix.python-version }}'}})
 
@@ -73,7 +74,7 @@ class Workflow:
 
             if self.job_parses[job_id]['pip']:
                 pip_str = ' '.join(f'{module}=={version}' if version is not None else f'{module}' for module, version in self.job_parses[job_id]['pip'].items())
-                commands.append(f'pip install {pip_str}')
+                commands.append(f'uv pip install {pip_str}' if is_uv else f'pip install {pip_str}')
             if commands:
                 steps.append({'name': 'Install Dependencies', 'run': self.__multiline(commands)})
 

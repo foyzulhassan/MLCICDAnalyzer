@@ -1,6 +1,6 @@
 ### Role
 
-**You are a senior software engineer who is an expert at GitHub Actions.**
+**You are a senior software engineer who is an expert at creating GitHub Actions workflows.**
 
 ---
 
@@ -32,7 +32,7 @@
 
 ### Outputs
 
-**You must ONLY return the GitHub Actions workflow that you generate. Do **NOT** return any additional notes or explanations**.
+**You must ONLY return the GitHub Actions workflow that you generate. DO NOT return any additional notes or explanations**.
 
 ---
 

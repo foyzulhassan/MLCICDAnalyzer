@@ -89,13 +89,13 @@ class HeuristicRecommendations:
             with open(self.recommendations_path, 'r') as file:
                 recommendations = json.load(file)
             for job_id in workflow['jobs']:
-                if recommendations[job_id]['concurrency']:
+                if recommendations[job_id]['concurrency'] is not None:
                     workflow['jobs'][job_id]['concurrency'] = recommendations[job_id]['concurrency']
 
-                if recommendations[job_id]['env']:
+                if recommendations[job_id]['env'] is not None:
                     workflow['jobs'][job_id]['env'] = recommendations[job_id]['env']
 
-                if recommendations[job_id]['fail-fast']:
+                if recommendations[job_id]['fail-fast'] is not None:
                     if 'strategy' not in workflow['jobs'][job_id]:
                         workflow['jobs'][job_id]['strategy'] = {}
                     workflow['jobs'][job_id]['strategy']['fail-fast'] = recommendations[job_id]['fail-fast']
@@ -106,7 +106,7 @@ class HeuristicRecommendations:
                 # if recommendations[job_id]['outputs']:
                 #     workflow['jobs'][job_id]['outputs'] = recommendations[job_id]['outputs']
 
-                if recommendations[job_id]['steps']:
+                if recommendations[job_id]['steps'] is not None:
                     workflow['jobs'][job_id]['steps'].pop() # Remove large step which is the last in the implementation
                     workflow['jobs'][job_id]['steps'].extend(recommendations[job_id]['steps'])
                     for i, step in enumerate(workflow['jobs'][job_id]['steps']): # Render multiline strings in steps properly
@@ -115,7 +115,7 @@ class HeuristicRecommendations:
                         multiline_run = utils.to_multiline_str(step['run'].strip().replace('\\n', '\n').split('\n'))
                         workflow['jobs'][job_id]['steps'][i]['run'] = multiline_run
 
-                if recommendations[job_id]['timeout-minutes']:
+                if recommendations[job_id]['timeout-minutes'] is not None:
                     workflow['jobs'][job_id]['timeout-minutes'] = recommendations[job_id]['timeout-minutes']
 
                 # if recommendations[job_id]['working-directory']:

@@ -106,8 +106,8 @@ class ModelRecommendations:
                 content = file.read()
             script = \
             {
-                'filename': Path(path).name, 
-                'content': content.strip().split('\n'),
+                'script_name': Path(path).stem, 
+                'script_content': content.strip().split('\n'),
             }
             scripts.append(script)
 
