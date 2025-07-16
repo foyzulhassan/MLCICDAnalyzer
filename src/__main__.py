@@ -59,6 +59,7 @@ def apply_model_recommendations(workflow_path: str) -> dict:
     model = ModelRecommendations(
         workflow_path=workflow_path,
         target_paths=CONFIG.target_paths,
+        requirements_path=CONFIG.requirements_path,
         template_path=CONFIG.model_template_path,
         instruction_path=CONFIG.model_instruction_path,
         output_dir=CONFIG.output_dir,
@@ -90,6 +91,7 @@ def apply_hybrid_recommendations(workflow_path: str) -> tuple[dict, dict]:
         workflow_path=workflow_path,
         requirements_path=CONFIG.requirements_path,
         target_paths=CONFIG.target_paths,
+        filters_path=CONFIG.filters_path,
 
         assemble_prompt_path=CONFIG.assemble_prompt_path,
         job_prompt_path=CONFIG.job_prompt_path,
@@ -143,7 +145,6 @@ def parse_trace(target_path: str):
         output_dir=CONFIG.output_dir,
         requirements_path=CONFIG.requirements_path,
         repository_dir=CONFIG.repository_dir,
-        filters_path=CONFIG.filters_path,
         new_trace=CONFIG.new_trace)
     parse = parse.parse(dump=True)
     print_divider(f'PARSE ~ {target_name}', is_start=False, is_major=False)

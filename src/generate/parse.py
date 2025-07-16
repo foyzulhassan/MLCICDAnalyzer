@@ -1,5 +1,4 @@
 import csv
-import glob
 import json
 import logging
 import os
@@ -16,14 +15,12 @@ class ParseTrace:
                  output_dir: str,
                  requirements_path: str,
                  repository_dir: str,
-                 filters_path: str,
                  new_trace: bool,
                  docker_path: str = None):
         self.target_path = target_path
         self.output_dir = output_dir
         self.requirements_path = requirements_path
         self.repository_dir = repository_dir
-        self.filters_path = filters_path
         self.new_trace = new_trace
         self.docker_path = docker_path
 
@@ -35,8 +32,6 @@ class ParseTrace:
         self.pip_packages_path = os.path.join(output_dir, 'packages.pip.json')
         self.apt_packages_path = os.path.join(output_dir, 'packages.apt.json')
         self.parse_path = os.path.join(self.output_dir, f'{self.target_name}.parse')
-        with open(self.filters_path, 'r') as file:
-            self.filters = json.load(file)
         self.paths = []
         self.parse_trace = {}
     
@@ -89,18 +84,10 @@ class ParseTrace:
 
     @__log_duration
     def __apt(self) -> list[str]:
-        """Parse apt packages that are unique to the strace log"""
+        """Parse unique and used apt packages from the strace log"""
         with open(self.apt_packages_path, 'r') as file:
             apt_packages = json.load(file)
-        used_packages = set()
-        for name in apt_packages:
-            is_used = any(filename in self.paths for filename in apt_packages[name])
-            if is_used:
-                used_packages.add(name)
-        used_packages = sorted(package for package in used_packages \
-                            if package not in self.filters['apt'] \
-                            and 'python' not in package \
-                            and ':' not in package)
+        used_packages = sorted(set(package_name for package_name, usage_paths in apt_packages.items() if any(usage_path in self.paths for usage_path in usage_paths)))
         return used_packages
     
     @__log_duration
@@ -129,49 +116,25 @@ class ParseTrace:
 
     @__log_duration
     def __env(self) -> dict:
-        """Parse environmental variables from ltrace and pyenv"""
-        env = []
+        """Parse environmental variables from ltrace and pyenv logs"""
+        env = {}
 
-        # Check whether a ltrace log exists for the job and identify env variables
+        # Identify env variables if ltrace logs (if any)
         if os.path.isfile(self.ltrace_path):
             with open(self.ltrace_path, 'r', errors='ignore') as log:
                 for entry in log:
                     content = re.match(r'(\d+)\s(\d+\.\d+)\s(.+?)->getenv\("(.+?)"\)\s+=\s+"(.+?)"', entry.strip())
                     if content:
                         _, _, _, key, value = content.groups()
-                        env.append({'key': key, 'value': value})
+                        env[key.strip()] = value.strip()
 
-        # Check whether a pyenv log exists for the job and identify env variables
+        # Identify env variables if pyenv logs (if any)
         if os.path.isfile(self.pyenv_path):
             with open(self.pyenv_path, 'r') as log:
                 for filename, key, value in csv.reader(log):
                     if filename:
-                        env.append({'key': key, 'value': value})
+                        env[key.strip()] = value.strip()
 
-        # Get the paths of non-imports, -workflows, and -documentation in the target repository
-        valid_extensions = tuple(self.filters['ext'])
-        paths = [path \
-                for path in glob.glob(os.path.join(self.repository_dir, '**', '*'), recursive=True)
-                if os.path.isfile(path) \
-                and path.endswith(valid_extensions) \
-                and 'site-packages' not in path \
-                and 'dist-packages' not in path \
-                and 'venv' not in path]
-
-        # Filter out unused and/or blacklisted environment variables
-        traced_keys, used_keys, duplicate_keys = set(entry['key'] for entry in env), set(), set()
-        for path in paths:
-            with open(path, 'r', errors='ignore') as file:
-                content = file.read()
-            used_keys.update(key for key in traced_keys if key in content)
-        env = {entry['key']: entry['value'] for entry in env \
-                if entry['key'] in used_keys \
-                and '/' not in entry['value'] \
-                and not entry['key'].startswith('_') \
-                and not entry['key'].startswith('PY') \
-                and entry['key'] not in self.filters['env'] \
-                and entry['key'] not in duplicate_keys \
-                and not duplicate_keys.add(entry['key'])}
         return env
 
     @__log_duration
@@ -199,7 +162,7 @@ class ParseTrace:
         # Identify requirements in the strace log but not in the pip requirements file
         missing_requirements = traced_requirements.difference(explicit_requirements | implicit_requirements)
         missing_requirements = {requirement: pip_packages[requirement]['version'] if requirement in pip_packages else None for requirement in missing_requirements}
-        missing_requirements = {name: missing_requirements[name] for name in sorted(missing_requirements.keys()) if name not in self.filters['pip']}
+        missing_requirements = {name: missing_requirements[name] for name in sorted(missing_requirements.keys())}
         return missing_requirements
 
     @__log_duration

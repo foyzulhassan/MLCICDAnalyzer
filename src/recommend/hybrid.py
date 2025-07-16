@@ -1,8 +1,10 @@
 import glob
+import itertools
 import json
 import logging
 import os
 from pathlib import Path
+import re
 import subprocess
 import time
 import uuid
@@ -24,6 +26,7 @@ class HybridRecommendations:
         workflow_path: str,
         requirements_path: str,
         target_paths: list[str],
+        filters_path: str,
         assemble_prompt_path: str,
         job_prompt_path: str,
         output_dir: str,
@@ -46,7 +49,10 @@ class HybridRecommendations:
         self.project_name = project_name
         self.target_paths = target_paths
         self.output_dir = output_dir
-        self.scripts = self.__get_scripts()
+
+        # Load the content filters
+        with open(filters_path, 'r') as file:
+            self.filters = json.load(file)
 
         # Load the requirements file
         self.requirements_path = requirements_path
@@ -66,6 +72,9 @@ class HybridRecommendations:
         self.chunk_field = 'chunk_content'
         self.max_chunks = max_chunks
         self.point_threshold = point_threshold
+
+        # Load scripts
+        self.scripts = self.__get_scripts()
 
         # Load job prompt
         self.job_prompt_path = job_prompt_path
@@ -111,13 +120,13 @@ class HybridRecommendations:
             
             # Get the inputs and dump it
             job_input = self.__get_job_inputs(script=script, job_name=job_name)
-            job_input_path = os.path.join(self.output_dir, f'{job_name}.job.input.hybrid.yaml')
+            job_input_path = os.path.join(self.output_dir, f'{job_name}.input.job.hybrid.json')
             with open(job_input_path, 'w') as file:
                 json.dump(job_input, file, indent=2)
 
             # Generate job blocks, or workflows for each job.
             job_block = self.__prompt(prompt=self.job_prompt, input=job_input)
-            job_path = os.path.join(self.output_dir, f'{job_name}.job.hybrid.yaml')
+            job_path = os.path.join(self.output_dir, f'{job_name}.job.hybrid.txt')
             with open(job_path, 'w') as file:
                 json.dump(job_block, file, indent=2)
             job_blocks.append(job_block)
@@ -128,7 +137,7 @@ class HybridRecommendations:
             'job_blocks': job_blocks,
             'actionlint_errors': None,
         }
-        assemble_input_path = os.path.join(self.output_dir, f'{self.workflow_name}.assemble.input.hybrid.yaml')
+        assemble_input_path = os.path.join(self.output_dir, f'{self.workflow_name}.input.assemble.hybrid.json')
         with open(assemble_input_path, 'w') as file:
             assemble_input_str = json.dumps(assemble_input, indent=2).strip()
             file.write(assemble_input_str)
@@ -164,13 +173,19 @@ class HybridRecommendations:
 
         # Get the runtime chunks for a runtime script
         runtime_chunks = {}
-        for chunk_type in ['apt', 'env', 'pip', 'python_versions', 'duration', 'paths']:
+        for chunk_type in ('apt', 'env', 'pip', 'paths'):
             points = self.__get_top_chunks(project_name=self.project_name, job_name=job_name, chunk_type=chunk_type, embedding=embedding)
             filtered_points = [point for point in points if point.score >= self.point_threshold]
+
+            runtime_chunks[chunk_type] = {} if chunk_type in ('env') else []
             if filtered_points:
-                if job_name not in runtime_chunks:
-                    runtime_chunks[job_name] = {}
-                runtime_chunks[job_name][chunk_type] = [point.payload[self.chunk_field] for point in filtered_points]
+                runtime_chunks[chunk_type] = list(set(itertools.chain(*[point.payload[self.chunk_field].splitlines() for point in filtered_points])))
+                if chunk_type in ('env'):
+                    runtime_chunks[chunk_type] = {pair.split(':', 1)[0].strip().strip('"'): pair.split(':', 1)[1].strip().strip('"') for pair in runtime_chunks[chunk_type]}
+        runtime_chunks = {f'runtime_accesses_{k}': v for k, v in runtime_chunks.items()}
+
+        # Get the runtime environment for a runtime script
+        runtime_environment = {f'runtime_environment_{key}': values for key, values in self.filters.items() if key in ('apt', 'env', 'pip')}
 
         # Build the input and return it
         base_job_block = utils.workflow_to_str({job_name: self.workflow['jobs'][job_name]}).strip()
@@ -178,8 +193,8 @@ class HybridRecommendations:
         {
             'base_job_block': f"```yaml\n{base_job_block}\n```",
             'bash_script': script,
-            'python_requirements': self.requirements,
-            'runtime_chunks': runtime_chunks,
+            'runtime_environment': runtime_environment,
+            'runtime_accesses': runtime_chunks,
         }
     
     @__log_duration
@@ -231,17 +246,21 @@ class HybridRecommendations:
             script_name = Path(path).stem
 
             with open(path, 'r') as file:
-                script_content = file.read().strip().split('\n')
+                script_content = f"```bash\n{file.read().strip()}\n```"
 
             parse_path = os.path.join(self.output_dir, f'{script_name}.parse')
             with open(parse_path, 'r') as file:
-                script_duration = json.load(file)['duration']
+                parse = json.load(file)
+            script_duration = round(parse['duration'])
+            script_python_version = parse['versions'][0]
 
             script = \
             {
                 'script_name': script_name, 
                 'script_content': script_content,
                 'script_duration': script_duration,
+                'script_python_version': script_python_version,
+                'script_python_requirements': self.requirements,
             }
             scripts.append(script)
         return scripts
@@ -326,10 +345,8 @@ class QdrantVectorizer:
                 parse = json.load(file)
             summary[f'{job_name}.apt'] = parse['apt']
             summary[f'{job_name}.env'] = parse['env']
-            summary[f'{job_name}.pip'] = parse['pip']
-            summary[f'{job_name}.python_versions'] = parse['versions']
-            summary[f'{job_name}.duration'] = parse['duration']
-            summary[f'{job_name}.paths'] = parse['paths']
+            summary[f'{job_name}.pip'] = sorted(package_name for package_name in parse['pip'])
+            summary[f'{job_name}.paths'] = sorted(path for path in parse['paths'] if not re.match(r'/(?:site-packages|dist-packages|venv|uv|sawra)/', path, flags=re.IGNORECASE))
 
         # Iterate through traces, chunk them, and embed them
         for trace_path, traced_values in summary.items():

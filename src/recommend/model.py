@@ -16,6 +16,7 @@ class ModelRecommendations:
         self,
         workflow_path: str,
         target_paths: list[str],
+        requirements_path: str,
         template_path: str,
         instruction_path: str,
         output_dir: str,
@@ -29,6 +30,11 @@ class ModelRecommendations:
         self.workflow_str = utils.workflow_to_str(self.workflow)
         self.target_paths = target_paths
         self.output_dir = output_dir
+
+        # Load the requirements file
+        self.requirements_path = requirements_path
+        with open(self.requirements_path, 'r') as file:
+            self.requirements = file.read().strip().split('\n')
 
         # Initialize a model client and its metadata
         self.api_key = api_key
@@ -108,20 +114,16 @@ class ModelRecommendations:
             {
                 'script_name': Path(path).stem, 
                 'script_content': content.strip().split('\n'),
+                'script_python_requirements': self.requirements,
             }
             scripts.append(script)
-
-        # Fill in the input template with input data
-        with open(self.template_path, 'r') as file:
-            template = file.read()
-        script_str = json.dumps({'shell_scripts': scripts}, indent=2)
-        template = template.replace('<<input_object_1>>', script_str)
+        inputs = {'bash_scripts': scripts}
 
         # Dump the filled input template to a file and return it
-        out_path = os.path.join(self.output_dir, 'inputs.model.txt')
+        out_path = os.path.join(self.output_dir, 'inputs.model.json')
         with open(out_path, 'w') as file:
-            file.write(template)
-        return template
+            json.dump(inputs, file, indent=2)
+        return inputs
     
     def __log_costs(self, funcname: str, response: ChatCompletion | CreateEmbeddingResponse) -> None:
         """Log the embedding/prompting costs that have been accumulated"""
