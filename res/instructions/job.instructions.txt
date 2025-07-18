@@ -29,12 +29,12 @@
 ### Responsibilities
 
 **You must use the inputs to improve the base_job_block. To do this, you must complete the following tasks:**
-- Remove environmental variables from env blocks in **base_job_block** that are either (1) already defined properly in **runtime_environment** or (2) unnecessary. Make sure to consider **runtime_environment_env** and **runtime_accesses_env** when completing this task.
-- Remove packages from installation commands in the step named "Install Dependencies" in **base_job_block** that are either (1) already installed properly in **runtime_environment** or (2) unnecessary. Make sure to consider **runtime_environment_apt**, **runtime_environment_pip**, **runtime_accesses_apt**, and **runtime_accesses_pip** when completing this task.
+- Remove environmental variables from env blocks in **base_job_block** that are defined in **runtime_environment_env** or are within an operating system, the Python interpreter, or GitHub Actions.
+- Remove apt packages from installation commands in the step named "Install Dependencies" in **base_job_block** that are either defined in **runtime_environment_apt** or are installed in the GitHub Actions `ubuntu` runner.
+- Remove pip packages from installation commands in the step named "Install Dependencies" in **base_job_block** that are either defined in **runtime_environment_pip** or are installed in the GitHub Actions `ubuntu` runner.
 - Replace all references to python version numbers that **DO NOT** belong to matrix blocks in **base_job_block** with ${{ matrix.python-version }}.
 - Replace all references to GitHub Actions runners that **DO NOT** belong to matrix blocks in **base_job_block** with ${{ matrix.os }}.
 - Update all actions in **base_job_block** to their latest versions (e.g. update "actions/setup-python@v2" to "actions/setup-python@v5").
-- **Remove all pip or apt commands that have invalid syntax.**
 
 ---
 

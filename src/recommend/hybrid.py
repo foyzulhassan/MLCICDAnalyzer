@@ -124,8 +124,11 @@ class HybridRecommendations:
             with open(job_input_path, 'w') as file:
                 json.dump(job_input, file, indent=2)
 
-            # Generate job blocks, or workflows for each job.
+            # Generate job blocks, or workflows for each job and remove common model bugs
             job_block = self.__prompt(prompt=self.job_prompt, input=job_input)
+            job_block, _ = re.subn(r'\|?\s+apt\s+install\s+-y\s*', '', job_block)
+
+            # Dump the job to a file
             job_path = os.path.join(self.output_dir, f'{job_name}.job.hybrid.txt')
             with open(job_path, 'w') as file:
                 json.dump(job_block, file, indent=2)
