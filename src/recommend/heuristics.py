@@ -166,8 +166,7 @@ class HeuristicRecommendations:
         #     recommendations[job_id]['working-directory'] = working_directory[job_id]
 
         if dump:
-            heuristic_path = os.path.join(self.output_dir, f'{self.workflow_name}.heuristic.recommendations')
-            with open(heuristic_path, 'w') as file:
+            with open(self.recommendations_path, 'w') as file:
                 json.dump(recommendations, file, indent=2)
         return recommendations
 
@@ -193,7 +192,11 @@ class HeuristicRecommendations:
         """Get environmental variables recommendations"""
         recommendations = {}
         for job_id in self.workflow['jobs']:
-            recommendations[job_id] = self.job_parses[job_id]['env'] if self.job_parses[job_id]['env'] else None
+            recommendations[job_id] = None
+            if self.job_parses[job_id]['env']:
+                is_path = lambda x: any(indicator in x for indicator in ('/', '\\'))
+                recommendations[job_id] = {k: v for k, v in self.job_parses[job_id]['env'].items() if not is_path(v)}
+                recommendations[job_id] = {k: recommendations[job_id][k] for k in sorted(recommendations[job_id])}
         return recommendations
 
     @__log_duration

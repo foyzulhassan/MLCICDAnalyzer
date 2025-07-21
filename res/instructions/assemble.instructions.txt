@@ -7,29 +7,29 @@
 ### Inputs
 
 **You will be provided with a JSON object that contains the following items:**
-- **job_blocks** is a list of GitHub Actions job blocks.
-- **actionlint_errors** is a string containing the validation errors by actionlint.
+- `job_blocks` is a list of GitHub Actions job blocks.
+- `actionlint_errors` is a string containing the validation errors by actionlint.
 
 ---
 
 ### Responsibilities
 
 **You must complete the following tasks:**
-- Merge **job_blocks** into a single GitHub Actions workflow.
-- Fix all **actionlint_errors**.
-- Ensure that the resulting GitHub Actions workflow is **valid** and **properly formatted**.
+- Merge `job_blocks` into a single GitHub Actions workflow.
+- Fix all `actionlint_errors`.
+- **Ensure that the resulting GitHub Actions workflow is valid and properly formatted.**
 
 ---
 
 ### Constraints
 
 **You must complete your tasks within the following constraints:**
-- **DO NOT** create additional job blocks that are not in **job_blocks**.
-- **DO NOT** modify the content of job blocks in **job_blocks**.
-- **DO NOT** change the names of job blocks in **job_blocks**.
+- **DO NOT** create additional job blocks that are not in `job_blocks`.
+- **DO NOT** modify the content of job blocks in `job_blocks`.
+- **DO NOT** change the names of job blocks in `job_blocks`.
 
 ---
 
 ### Outputs
 
-**You must ONLY return the GitHub Actions workflow that you generate. DO NOT return any additional notes or explanations**.
+**You must ONLY return the GitHub Actions workflow that you generate. DO NOT return any additional notes or explanations.**

@@ -7,25 +7,25 @@
 ### Inputs
 
 **You will be provided with a JSON object that contains the following items:**
-- **bash_scripts** is a list of JSON objects that represent bash scripts. Each bash script in **bash_scripts** contains the following items:
-  - **script_name** is the name of the bash script.
-  - **script_content** is the content of the bash script.
-  - **script_python_requirements** is a list of python dependencies that the bash script explicitly depends on.
+- `bash_scripts` is a list of JSON objects that represent bash scripts. Each bash script in `bash_scripts` contains the following items:
+  - `script_name` is the name of the bash script.
+  - `script_content` is the content of the bash script.
+  - `script_python_requirements` is a list of python dependencies that the bash script explicitly depends on.
 
 ---
 
 ### Responsibilities
 
 **You must use the inputs to generate a GitHub Actions workflow file. For each bash script in bash_scripts, you must:**
-- Create a job in the workflow with a job_id that is identical to the **script_name** of its corresponding bash script.
-- Ensure that the job runs all the commands in the **script_content** of its corresponding bash script.
+- Create a job in the workflow with a job_id that is identical to the `script_name` of its corresponding bash script.
+- Ensure that the job runs all the commands in the `script_content` of its corresponding bash script.
 
 ---
 
 ### Constraints
 
 **You must complete your tasks within the following constraints:**
-- **DO NOT** attempt to directly execute any bash script from **bash_scripts** in a job.
+- **DO NOT** attempt to directly execute any bash script from `bash_scripts` in a job.
 - **DO NOT** add "#!/bin/bash" to run blocks.
 - **DO NOT** make changes that would cause the workflow to fail.
 - **DO NOT** produce an invalid or improperly formatted workflow.
@@ -34,4 +34,4 @@
 
 ### Outputs
 
-**You must ONLY return the GitHub Actions workflow that you generate. DO NOT return any additional notes or explanations**.
+**You must ONLY return the GitHub Actions workflow that you generate. DO NOT return any additional notes or explanations.**

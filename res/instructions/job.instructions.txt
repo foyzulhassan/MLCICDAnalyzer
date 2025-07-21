@@ -7,34 +7,34 @@
 ### Inputs
 
 **You will be provided with a JSON object that contains the following items:**
-- **base_job_block** is a single job block from an existing GitHub Actions workflow.
-- **bash_script** is a JSON object that represents a bash script whose runtime information was used to generate **base_job_block**. **bash_script** contains the following items:
-  - **script_name** is the name of the bash script.
-  - **script_content** is the content of the bash script.
-  - **script_duration** is the duration of the bash script in seconds.
-  - **script_python_version** is the python version that the bash script used.
-  - **script_python_requirements** is a list of python dependencies that the bash script explicitly depends on.
-- **runtime_environment** is a JSON object that represents the runtime environment that **bash_script** runs in. **runtime_environment** contains the following items:
-  - **runtime_environment_apt** is a list of apt packages that were already installed in the runtime environment.
-  - **runtime_environment_env** is a JSON of environmental variables that were already defined in the runtime environment.
-  - **runtime_environment_pip** is a list of python packages that were already installed in the runtime environment.
-- **runtime_accesses** is a JSON object that represents runtime information that **bash_script** attempted to access. **runtime_accesses** contains the following items:
-  - **runtime_accesses_apt** is a list of the apt packages that **bash_script** attempted to access.
-  - **runtime_accesses_env** is a JSON of environmental variables that **bash_script** attempted to access.
-  - **runtime_accesses_pip** is a list of python packages that **bash_script** attempted to access.
-  - **runtime_accesses_paths** is a list of paths that **bash_script** attempted to access.
+- `base_job_block` is a single job block from an existing GitHub Actions workflow.
+- `bash_script` is a JSON object that represents a bash script whose runtime information was used to generate `base_job_block`. `bash_script` contains the following items:
+  - `script_name` is the name of the bash script.
+  - `script_content` is the content of the bash script.
+  - `script_duration` is the duration of the bash script in seconds.
+  - `script_python_version` is the python version that the bash script used.
+  - `script_python_requirements` is a list of python dependencies that the bash script explicitly depends on.
+- `runtime_environment` is a JSON object that represents the runtime environment that `bash_script` runs in. `runtime_environment` contains the following items:
+  - `runtime_environment_apt` is a list of apt packages that were already installed in the runtime environment.
+  - `runtime_environment_env` is a JSON of environmental variables that were already defined in the runtime environment.
+  - `runtime_environment_pip` is a list of python packages that were already installed in the runtime environment.
+- `runtime_accesses` is a JSON object that represents runtime information that `bash_script` attempted to access. `runtime_accesses` contains the following items:
+  - `runtime_accesses_apt` is a list of the apt packages that `bash_script` attempted to access.
+  - `runtime_accesses_env` is a JSON of environmental variables that `bash_script` attempted to access.
+  - `runtime_accesses_pip` is a list of python packages that `bash_script` attempted to access.
+  - `runtime_accesses_paths` is a list of paths that `bash_script` attempted to access.
 
 ---
 
 ### Responsibilities
 
 **You must use the inputs to improve the base_job_block. To do this, you must complete the following tasks:**
-- Remove environmental variables from env blocks in **base_job_block** that are defined in **runtime_environment_env** or are within an operating system, the Python interpreter, or GitHub Actions.
-- Remove apt packages from installation commands in the step named "Install Dependencies" in **base_job_block** that are either defined in **runtime_environment_apt** or are installed in the GitHub Actions `ubuntu` runner.
-- Remove pip packages from installation commands in the step named "Install Dependencies" in **base_job_block** that are either defined in **runtime_environment_pip** or are installed in the GitHub Actions `ubuntu` runner.
-- Replace all references to python version numbers that **DO NOT** belong to matrix blocks in **base_job_block** with ${{ matrix.python-version }}.
-- Replace all references to GitHub Actions runners that **DO NOT** belong to matrix blocks in **base_job_block** with ${{ matrix.os }}.
-- Update all actions in **base_job_block** to their latest versions (e.g. update "actions/setup-python@v2" to "actions/setup-python@v5").
+- Remove all environmental variables from env blocks in `base_job_block` that are either defined by or specific to one of the following: operating systems, GitHub Actions, terminals, compilers, interpreters, runtimes, package managers, containers, or VM images.
+- Remove all packages from `apt install` commands in the step named `Install Dependencies` in `base_job_block` that are already installed by the runtime environment.
+- Remove all packages from `pip install` commands in the step named `Install Dependencies` in `base_job_block` that are already installed by the runtime environment.
+- Replace all references to python version numbers that **DO NOT** belong to matrix blocks in `base_job_block` with ${{ matrix.python-version }}.
+- Replace all references to GitHub Actions runners that **DO NOT** belong to matrix blocks in `base_job_block` with ${{ matrix.os }}.
+- Update all actions in `base_job_block` to their latest versions (e.g. update "actions/setup-python@v2" to "actions/setup-python@v5").
 
 ---
 
@@ -42,8 +42,8 @@
 
 **You must complete your tasks within the following constraints to improve the base_job_block:**
 - **DO NOT** change the order of run blocks and their lines.
-- **DO NOT** add additional lines to run blocks in **base_job_block**.
-- **DO NOT** make changes to **base_job_block** that would cause it to fail.
+- **DO NOT** add additional lines to run blocks in `base_job_block`.
+- **DO NOT** make changes to `base_job_block` that would cause it to fail.
 - **DO NOT** add additional jobs.
 - **DO NOT** add additional steps within a job.
 - **DO NOT** produce an entire GitHub Actions workflow.

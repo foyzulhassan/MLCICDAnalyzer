@@ -170,6 +170,9 @@ class HybridRecommendations:
     def __get_job_inputs(self, script: dict[str, str], job_name: str) -> dict[str, str]:
         """Get the job input data that will be passed to the model"""
 
+        # Get the base job block
+        job = self.workflow['jobs'][job_name]
+
         # Get the embedding for the target script
         content = '\n'.join(script['script_content'])
         embedding = self.__get_embeddings(content)
@@ -190,8 +193,40 @@ class HybridRecommendations:
         # Get the runtime environment for a runtime script
         runtime_environment = {f'runtime_environment_{key}': values for key, values in self.filters.items() if key in ('apt', 'env', 'pip')}
 
+        # Filter out common environmental variables
+        if 'env' in job:            
+            job['env'] = {k: v for k, v in job['env'].items() if k not in self.filters['env']}
+            if not job['env']:
+                job.pop('env')
+
+        # Filter out common apt and pip packages
+        if 'steps' in job:
+            for step_id, _ in enumerate(job['steps']):
+                if 'name' in job['steps'][step_id] and job['steps'][step_id]['name'] == 'Install Dependencies' and 'run' in job['steps'][step_id]:
+                    lines = []
+                    for line in str(job['steps'][step_id]['run']).splitlines():
+                        leading_spaces = '' * (len(line) - len(line.lstrip(' ')))
+                        if line.strip().startswith('apt install -y'):
+                            parts = [part for part in line.split()[3:] if part.split('<', 1)[0].split('>', 1)[0].split('=', 1)[0] not in self.filters['apt']]
+                            if parts:
+                                lines.append(leading_spaces + 'apt install -y ' + ' '.join(parts))
+                        elif line.strip().startswith('pip install'):
+                            parts = [part for part in line.split()[2:] if part.split('<', 1)[0].split('>', 1)[0].split('=', 1)[0] not in self.filters['pip']]
+                            if parts:
+                                lines.append(leading_spaces + 'pip install ' + ' '.join(parts))
+                        elif line.strip().startswith('uv pip install'):
+                            parts = [part for part in line.split()[3:] if part.split('<', 1)[0].split('>', 1)[0].split('=', 1)[0] not in self.filters['pip']]
+                            if parts:
+                                lines.append(leading_spaces + 'uv pip install ' + ' '.join(parts))
+                        else:
+                            lines.append(line)
+                    if ''.join(lines).strip():
+                        job['steps'][step_id]['run'] = utils.to_multiline_str(lines)
+                    else:
+                        job['steps'].pop(step_id)
+
         # Build the input and return it
-        base_job_block = utils.workflow_to_str({job_name: self.workflow['jobs'][job_name]}).strip()
+        base_job_block = utils.workflow_to_str({job_name: job}).strip()
         return \
         {
             'base_job_block': f"```yaml\n{base_job_block}\n```",
