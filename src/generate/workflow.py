@@ -70,7 +70,7 @@ class Workflow:
 
             if self.job_parses[job_id]['apt']:
                 apt_str = ' '.join(self.job_parses[job_id]['apt'])
-                commands.append(f'apt install -y {apt_str}')
+                commands.append(f'sudo apt install -y {apt_str}')
 
             if self.job_parses[job_id]['pip']:
                 pip_str = ' '.join(f'{module}=={version}' if version is not None else f'{module}' for module, version in self.job_parses[job_id]['pip'].items())
