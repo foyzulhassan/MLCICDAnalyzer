@@ -15,11 +15,6 @@ authors = [
   { name = "Rahul Ghanshyam Chavan", email = "rchavan@umich.edu" },
   { name = "Foyzul Hassan", email = "foyzul@umich.edu" },
 ]
-maintainers = [
-  { name = "Javid Ditty", email = "jditty@umich.edu" },
-  { name = "Rahul Ghanshyam Chavan", email = "rchavan@umich.edu" },
-  { name = "Foyzul Hassan", email = "foyzul@umich.edu" },
-]
 dependencies = [
   "jsonschema>=4.24.0",
   "numpy>=2.2.6",
@@ -43,8 +38,3 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-
-[project.urls]
-Documentation = "https://github.com/foyzulhassan/MLCICDAnalyzer#readme"
-Issues = "https://github.com/foyzulhassan/MLCICDAnalyzer/issues"
-Source = "https://github.com/foyzulhassan/MLCICDAnalyzer"
