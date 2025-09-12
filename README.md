@@ -6,11 +6,11 @@ To generate workflows, SAWRA first runs and <i>traces</i> your test scripts in y
 The technical details of SAWRA, as well as our evaluation, can be found on [Zenodo](https://zenodo.org/records/17101180?preview=1&token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6ImFjZTU1YjkyLTM0ZTktNDBkMi1hMzVlLTA1OGU0OWRkNDVkNyIsImRhdGEiOnt9LCJyYW5kb20iOiI3YjUyY2FjYmVlM2QwN2M3MTAwYTM4ZjBhMmYzZDE0ZiJ9.y0QdyaIgSLwGWiseDcHa-HBpqMBpVo2SQw8BPureCrThhxg4NcCUOcA32A2QhpPyRT--fm80-hpfxPKcjFzmeA).
 
 ## Dependencies
-SAWRA depends on many tools that cannot be bundled into its distributions. Because some of these tools are only available on Linux, <i>SAWRA cannot be used on Windows or MacOS, and thus it cannot produce workflows that use them.</i>
+SAWRA depends on many tools that cannot be bundled into its distributions. Because some of these tools are only available on Linux, <i>SAWRA cannot be used on Windows or MacOS, and thus it cannot produce workflows that use them.</i> <b>It is recommended to run SAWRA in a Docker container as a root user to avoid issues related to dependency resolution.</b>
 
 To install the tools that SAWRA depends on:
 ```bash
-sudo apt-get install -y ltrace strace
+apt-get install -y ltrace strace
 go install github.com/rhysd/actionlint/cmd/actionlint@latest
 ```
 
@@ -38,10 +38,12 @@ workflow_name = ""
 # An ordered list of absolute paths to the user-provided test scripts.
 # - Each test script represents a seperate job in the workflow.
 # - The order of the paths will determine the order of the jobs in the workflow.
+# - The scripts MUST be bash scripts.
 target_paths = []
 
 # An absolute path to a directory where outputs will be stored.
 # - During workflow generation, various artifacts will be stored here.
+# - This directory MUST exist prior to the execution.
 output_dir = ""
 
 # An absolute path to the root of the repository being tested.
