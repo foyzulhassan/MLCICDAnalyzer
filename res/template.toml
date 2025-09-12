@@ -1,59 +1,53 @@
-# ========================================================================== #
-#                                   TOOL                                     #
-# ========================================================================== #
-
-# name of the project
+# The name of the project.
 project_name = ""
 
-# name of the workflow to be produced (will be used to create the output directory)
+# The name of the workflow to be produced.
+# - This name will be used to create the final workflow (i.e. <workflow_name>.hybrid.yaml)
 workflow_name = ""
 
-# ordered list of absolute paths to target scripts 
+# An ordered list of absolute paths to the user-provided test scripts.
+# - Each test script represents a seperate job in the workflow.
+# - The order of the paths will determine the order of the jobs in the workflow.
 target_paths = []
 
-# absolute path to a directory where outputs will be stored
+# An absolute path to a directory where outputs will be stored.
+# - During workflow generation, various artifacts will be stored here.
 output_dir = ""
 
-# absolute path to a directory of the repository
+# An absolute path to the root of the repository being tested.
 repository_dir = ""
 
-# absolute path to a pip requirements file
+# An absolute path to a pip requirements file.
+# - If no pip requirements are explicitly defined, point to an empty requirements.txt file.
 requirements_path = ""
 
-# absolute path to a directory to run targets in
+# An absolute path to a directory to run the user-provided test scripts in.
+# - Usually, this is the same of the root of the repository being tested (i.e. repository_dir)
 working_dir = ""
 
-# ========================================================================== #
-#                                HEURISTIC                                   #
-# ========================================================================== #
-
-# weights for Multi-Criteria Decision Making (MCDM) to distribute steps such that:
-# - the difference in duration between each step is minimized
-# - the total number of steps is maximized
+# The weights for Multi-Criteria Decision Making (MCDM) to distribute steps such that:
+# 1. The difference in duration between each step is minimized.
+# 2. The total number of steps is maximized.
 step_mcdm_weights = [0.6, 0.4]
 
-# number of potential step chunks to consider when distributing commands
+# The number of potential step chunks to consider when distributing commands.
+# - Additional chunks can result in improved step distributions but require a significant amount of time.
 step_chunk_count = 100000
 
-# job duration thresholds over which syntax can be recommended
+# The job duration thresholds over which workflow components can be recommended.
 recommendation_threshold = { concurrency = 138, fail_fast = 66, timeout_minutes = 319 }
 
-# multipliers to apply to job durations to determine syntax values
+# The multipliers to apply to job durations to determine syntax values.
+# - For timeout_minutes, the multiplier is applied to job minutes, not seconds.
+#   However, the associated technical paper lists the converted version for seconds.
 recommendation_multiplier = { timeout_minutes = 13 }
 
-# ========================================================================== #
-#                                   LLM                                      #
-# ========================================================================== #
-
-# OpenAI configuration
+# The configurations for OpenAI.
 openai = { chat_model = "gpt-4o-mini", embedding_model = "text-embedding-ada-002", api_key = "" }
 
-# Qdrant server configuration
+# The configurations for Qdrant.
+# - The API key should be the same as the OpenAI API key.
 qdrant = { hostname = "localhost", port = "6333", api_key = "" }
-
-# ========================================================================== #
-#                                DEPRECATED                                  #
-# ========================================================================== #
 
 # absolute path to a log listing the docker containers on the machine (generated with this tool)
 # - Missing: Service-based recommendations will not be provided
